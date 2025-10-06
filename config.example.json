@@ -1,0 +1,7 @@
+{
+  "accessToken": "1000.your_access_token_here",
+  "orgId": "your_organization_id_here",
+  "clientId": "1000.your_client_id_here",
+  "clientSecret": "your_client_secret_here",
+  "refreshToken": "1000.your_refresh_token_here"
+}
