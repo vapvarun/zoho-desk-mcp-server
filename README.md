@@ -186,13 +186,16 @@ node build/index.js
 
 ### Automated Daily Summaries
 
-Send ticket summaries to Slack automatically with included automation scripts.
+Send **OPEN** Zoho Desk ticket summaries to Slack automatically with smart filtering.
 
 **Features:**
+- ✅ Shows only OPEN tickets (skips closed/resolved)
+- 🗑️ Automatically filters spam/marketing tickets (guest posts, backlinks, etc.)
 - 📊 Daily/weekly ticket summaries
 - 🔔 Slack notifications
-- 📈 Status and priority breakdowns
-- 🔄 Combined Zoho + Basecamp reports
+- 📈 Priority breakdowns (High, Medium, Low)
+- 📋 Recent tickets list (top 5)
+- 🎯 Customizable filters and schedules
 
 **Quick Setup:**
 
@@ -202,11 +205,11 @@ export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 
 # Test manually
 cd automation
-node combined-summary-slack.js
+node ticket-summary-slack.js
 
 # Schedule with cron (daily at 9 AM)
 crontab -e
-# Add: 0 9 * * * cd /path/to/automation && node combined-summary-slack.js
+# Add: 0 9 * * * cd /path/to/automation && node ticket-summary-slack.js
 ```
 
 **See:** [`automation/README.md`](automation/README.md) for complete setup guide.

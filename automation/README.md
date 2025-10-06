@@ -1,33 +1,22 @@
-# 🤖 Automated Ticket & Project Summaries to Slack
+# 🤖 Automated Zoho Desk Ticket Summaries to Slack
 
-Send automated daily/weekly summaries of Zoho Desk tickets and Basecamp projects to Slack.
+Send automated daily/weekly summaries of Zoho Desk support tickets to Slack.
 
-## 📋 Available Scripts
+## 📋 What It Does
 
-### 1. Zoho Desk Summary
 **File:** `ticket-summary-slack.js`
 
-Sends summary of Zoho Desk tickets with:
-- Total ticket count
-- Breakdown by status (Open, Closed, etc.)
-- Breakdown by priority (High, Medium, Low)
-- Recent tickets (top 5)
-
-### 2. Basecamp Summary
-**File:** `card-summary-slack.js`
-
-Sends summary of Basecamp projects with:
-- Total project count
-- Active vs archived
-- Recent active projects
-
-### 3. Combined Summary (Recommended)
-**File:** `combined-summary-slack.js`
-
-Sends comprehensive summary of both:
-- Zoho Desk tickets
-- Basecamp projects
-- All in one message
+Sends summary of **OPEN** Zoho Desk tickets with smart filtering:
+- ✅ Shows only OPEN tickets (skips closed/resolved)
+- 🗑️ Automatically filters out spam/marketing tickets:
+  - Guest post requests
+  - Backlink/link exchange requests
+  - Collaboration/partnership spam
+  - Link building outreach
+- 📊 Total open ticket count
+- 📈 Breakdown by priority (High, Medium, Low, None)
+- 📋 Recent tickets (top 5)
+- ⏰ Customizable report frequency (daily, weekly, custom)
 
 ---
 
@@ -64,19 +53,16 @@ export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 }
 ```
 
-### Step 3: Make Scripts Executable
+### Step 3: Make Script Executable
 
 ```bash
 cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server/automation"
 chmod +x ticket-summary-slack.js
-chmod +x combined-summary-slack.js
 ```
 
 ---
 
 ## 🧪 Testing
-
-### Test Zoho Desk Summary
 
 ```bash
 cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server/automation"
@@ -88,27 +74,29 @@ export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 node ticket-summary-slack.js
 ```
 
-### Test Combined Summary
-
-```bash
-cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server/automation"
-
-# Set webhook URL
-export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
-
-# Run script
-node combined-summary-slack.js
-```
-
 **Expected Output:**
 ```
-🔄 Fetching data from Zoho Desk and Basecamp...
+🔄 Fetching open tickets from Zoho Desk...
+✅ Fetched 20 open tickets
+📋 Processing 20 genuine tickets
+📊 Summary generated
+   Total: 20
+   By Priority: { None: 9, High: 11 }
+📤 Sending to Slack...
+✅ Message sent to Slack successfully!
+```
 
-✅ Zoho Desk: 47 tickets
-✅ Basecamp: 12 projects
-
-📤 Sending summary to Slack...
-✅ Summary sent successfully!
+**With spam filtering:**
+```
+🔄 Fetching open tickets from Zoho Desk...
+✅ Fetched 25 open tickets
+🗑️  Filtered out 5 spam/marketing tickets
+📋 Processing 20 genuine tickets
+📊 Summary generated
+   Total: 20
+   By Priority: { None: 9, High: 11 }
+📤 Sending to Slack...
+✅ Message sent to Slack successfully!
 ```
 
 ---
@@ -124,23 +112,23 @@ crontab -e
 
 Add this line:
 ```cron
-0 9 * * * export SLACK_WEBHOOK_URL="YOUR_WEBHOOK_URL" && cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server/automation" && /usr/local/bin/node combined-summary-slack.js >> /tmp/slack-summary.log 2>&1
+0 9 * * * export SLACK_WEBHOOK_URL="YOUR_WEBHOOK_URL" && cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server/automation" && /usr/local/bin/node ticket-summary-slack.js >> /tmp/zoho-summary.log 2>&1
 ```
 
 ### Weekly Summary (Monday at 9 AM)
 
 ```cron
-0 9 * * 1 export SLACK_WEBHOOK_URL="YOUR_WEBHOOK_URL" && cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server/automation" && /usr/local/bin/node combined-summary-slack.js >> /tmp/slack-summary.log 2>&1
+0 9 * * 1 export SLACK_WEBHOOK_URL="YOUR_WEBHOOK_URL" && cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server/automation" && /usr/local/bin/node ticket-summary-slack.js >> /tmp/zoho-summary.log 2>&1
 ```
 
-### Multiple Reports
+### Multiple Daily Reports
 
 ```cron
-# Daily combined summary at 9 AM
-0 9 * * * export SLACK_WEBHOOK_URL="YOUR_WEBHOOK_URL" && cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server/automation" && /usr/local/bin/node combined-summary-slack.js >> /tmp/slack-summary.log 2>&1
+# Morning summary at 9 AM
+0 9 * * * export SLACK_WEBHOOK_URL="YOUR_WEBHOOK_URL" && cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server/automation" && /usr/local/bin/node ticket-summary-slack.js >> /tmp/zoho-summary.log 2>&1
 
-# Zoho Desk summary at 5 PM
-0 17 * * * export SLACK_WEBHOOK_URL="YOUR_WEBHOOK_URL" && cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server/automation" && /usr/local/bin/node ticket-summary-slack.js >> /tmp/slack-summary.log 2>&1
+# Afternoon summary at 5 PM
+0 17 * * * export SLACK_WEBHOOK_URL="YOUR_WEBHOOK_URL" && cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server/automation" && /usr/local/bin/node ticket-summary-slack.js >> /tmp/zoho-summary.log 2>&1
 ```
 
 ### Cron Schedule Examples
@@ -157,41 +145,32 @@ Add this line:
 
 ## 📊 Sample Slack Message
 
-The combined summary message looks like this:
-
 ```
-📊 Daily Workflow Summary
+📊 Open Support Tickets
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🎫 Zoho Desk Tickets
+Total Tickets: 20
 
-Total Tickets: 47
 By Status:
-• Open: 23
-• Closed: 18
-• On Hold: 6
+• Open: 20
+
+By Priority:
+• High: 11
+• None: 9
 
 Recent Tickets:
-• #12345 - Login issue for customer
-• #12346 - Feature request: Dark mode
-• #12347 - Bug in payment gateway
+• #36145 - Plugin compatibility issue with WordPress 6.4
+• #36142 - BuddyPress notification not working
+• #36138 - WooCommerce integration request
+• #36135 - Reign theme customization help needed
+• #36130 - LearnDash course progress not saving
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📋 Basecamp Projects
-
-Total Projects: 12
-Active Projects: 8
-
-Active Projects:
-• Website Redesign
-• Mobile App v2.0
-• API Integration
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Generated: 2025-10-06 09:00 AM | Zoho Desk + Basecamp MCP Servers
+Generated: 2025-10-06 09:00 AM | Zoho Desk MCP Server
 ```
+
+**Note:** Only genuine support tickets are shown. Spam tickets (guest posts, backlinks, etc.) are automatically filtered out.
 
 ---
 
@@ -213,11 +192,47 @@ const params = new URLSearchParams();
 params.append('modifiedTimeRange', yesterday.toISOString());
 ```
 
-### Filter by Status
+### Customize Spam Filter
+
+Edit the spam keywords in the script:
 
 ```javascript
-// Only open tickets
-const tickets = await fetchTickets('Open', 100);
+// In ticket-summary-slack.js
+const spamKeywords = [
+  'guest post',
+  'guest blog',
+  'collaboration',
+  'backlink',
+  'link exchange',
+  'link building',
+  'guest article',
+  'sponsored post',
+  'link swap',
+  'outreach',
+  'partnership',
+  // Add your own keywords here
+];
+```
+
+### Show All Tickets (Including Closed)
+
+To include closed tickets, modify the main function:
+
+```javascript
+// Change from:
+const response = await fetchTickets('Open', 100);
+
+// To:
+const response = await fetchTickets(null, 100);
+```
+
+### Disable Spam Filtering
+
+To disable spam filtering:
+
+```javascript
+// Comment out the filter line in main()
+// tickets = filterSpamTickets(tickets);
 ```
 
 ### Custom Slack Channels
@@ -244,13 +259,9 @@ export SLACK_WEBHOOK_MGMT="https://hooks.slack.com/services/AAA/BBB/CCC"
 - Access token expired (refresh using `../refresh-token.sh`)
 - Run: `cd .. && ./refresh-token.sh`
 
-### "Basecamp API error: 401"
-- Basecamp token expired
-- Check Basecamp token expiration
-
 ### Cron job not running
 - Check cron logs: `grep CRON /var/log/syslog`
-- Check script logs: `cat /tmp/slack-summary.log`
+- Check script logs: `cat /tmp/zoho-summary.log`
 - Verify node path: `which node`
 - Use full paths in cron
 
@@ -281,14 +292,14 @@ OPEN_COUNT=$(node -e "
 ")
 
 if [ "$OPEN_COUNT" -gt 0 ]; then
-  node combined-summary-slack.js
+  node ticket-summary-slack.js
 fi
 ```
 
 ### Send to Multiple Channels
 
 ```javascript
-// Modify combined-summary-slack.js
+// Modify ticket-summary-slack.js
 
 const WEBHOOKS = [
   process.env.SLACK_WEBHOOK_SUPPORT,
@@ -297,6 +308,21 @@ const WEBHOOKS = [
 
 for (const webhook of WEBHOOKS) {
   await sendToSlack(message, webhook);
+}
+```
+
+### Custom Filters
+
+```javascript
+// High priority open tickets only
+async function fetchHighPriorityOpenTickets() {
+  const params = new URLSearchParams();
+  params.append('status', 'Open');
+  params.append('priority', 'High');
+  params.append('limit', '50');
+
+  const url = `${ZOHO_API_BASE}/tickets?${params}`;
+  // ... fetch logic
 }
 ```
 
