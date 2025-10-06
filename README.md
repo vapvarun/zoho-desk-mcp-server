@@ -283,7 +283,43 @@ Uses strict TypeScript 5.3+ with:
 
 ### Token Refresh
 
-The Zoho API client includes automatic token refresh:
+**Zoho access tokens expire after 1 hour.** When your token expires, you'll see authentication errors.
+
+#### Quick Token Refresh (Recommended)
+
+Use the included refresh script:
+
+```bash
+cd /path/to/zoho-desk-mcp-server
+./refresh-token.sh
+```
+
+This script automatically:
+- ✅ Requests a new access token from Zoho
+- ✅ Updates `config.json`
+- ✅ Updates Claude Desktop config
+- ✅ Updates WordPress (if available)
+
+**After refreshing, restart Claude Desktop!**
+
+#### Manual Token Refresh
+
+```bash
+curl -X POST "https://accounts.zoho.com/oauth/v2/token" \
+  -d "refresh_token=YOUR_REFRESH_TOKEN" \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  -d "grant_type=refresh_token"
+```
+
+Then update the `accessToken` in:
+1. `config.json`
+2. Claude Desktop config
+3. Restart Claude Desktop
+
+#### Programmatic Token Refresh
+
+The Zoho API client includes token refresh support:
 
 ```typescript
 import { ZohoAPI } from './zoho-api.js';

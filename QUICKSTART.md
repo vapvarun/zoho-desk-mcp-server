@@ -159,8 +159,20 @@ node build/index.js
 - Check that config.json exists and contains the access token
 - Or verify environment variables are set in Claude config
 
-### API Errors
-- Check if your access token has expired
+### API Errors / "Token Invalid or Expired"
+
+**Zoho access tokens expire after 1 hour!**
+
+To refresh your token:
+
+```bash
+cd "/Users/varundubey/Local Sites/reign-learndash/app/public/zoho-desk-mcp-server"
+./refresh-token.sh
+```
+
+Then **restart Claude Desktop** (Cmd+Q, then reopen).
+
+Other API error causes:
 - Verify you have proper permissions in Zoho Desk
 - Ensure organization ID is correct
 
