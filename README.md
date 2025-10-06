@@ -18,7 +18,8 @@ A Model Context Protocol (MCP) server that provides comprehensive Zoho Desk inte
 ### 🎯 Complete Ticket Management
 - **List & Filter**: View tickets by status, priority, date with advanced filtering
 - **CRUD Operations**: Create, read, update, and delete support tickets
-- **Threaded Conversations**: View and reply to ticket threads
+- **Threaded Conversations**: Automatically includes all replies when reading tickets
+- **Comments & Notes**: Add internal comments and public updates to tickets
 - **Tag Management**: Organize tickets with tags and categories
 
 ### 👥 Customer & Contact Management
@@ -170,22 +171,62 @@ node build/index.js
 
 "Add tags 'urgent' and 'security' to ticket #12345"
 
+"Move ticket #12345 to the Technical Support department"
+
 "Show me all tickets for contact ID 98765"
 
 "List all support agents in the Sales department"
+
+"List all departments and move ticket #98765 to department ID 123456"
 ```
+
+---
+
+## 🤖 Automation & Slack Integration
+
+### Automated Daily Summaries
+
+Send ticket summaries to Slack automatically with included automation scripts.
+
+**Features:**
+- 📊 Daily/weekly ticket summaries
+- 🔔 Slack notifications
+- 📈 Status and priority breakdowns
+- 🔄 Combined Zoho + Basecamp reports
+
+**Quick Setup:**
+
+```bash
+# Configure Slack webhook
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+
+# Test manually
+cd automation
+node combined-summary-slack.js
+
+# Schedule with cron (daily at 9 AM)
+crontab -e
+# Add: 0 9 * * * cd /path/to/automation && node combined-summary-slack.js
+```
+
+**See:** [`automation/README.md`](automation/README.md) for complete setup guide.
 
 ---
 
 ## 🛠️ Available Tools
 
-### Ticket Management (6 tools)
+### Ticket Management (7 tools)
 - `zoho_list_tickets` - List tickets with filters
-- `zoho_get_ticket` - Get ticket details with threads
+- `zoho_get_ticket` - Get ticket details with all threaded replies (automatic)
 - `zoho_create_ticket` - Create new support ticket
-- `zoho_update_ticket` - Update ticket status/priority/assignee
+- `zoho_update_ticket` - Update ticket status/priority/assignee/department
+- `zoho_move_ticket` - Move/transfer ticket to different department
 - `zoho_reply_ticket` - Add reply or private note
 - `zoho_delete_ticket` - Delete/trash a ticket
+
+### Ticket Comments (2 tools)
+- `zoho_list_ticket_comments` - List all comments on a ticket
+- `zoho_add_ticket_comment` - Add internal or public comment to ticket
 
 ### Ticket Tags (2 tools)
 - `zoho_get_ticket_tags` - Get all tags for a ticket
@@ -204,7 +245,7 @@ node build/index.js
 ### Search (1 tool)
 - `zoho_search_tickets` - Full-text ticket search
 
-**Total: 17 powerful AI tools**
+**Total: 20 powerful AI tools**
 
 ---
 
@@ -341,9 +382,7 @@ Do not create public GitHub issues for security problems.
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-### Quick Contribution Guide
+We welcome contributions!
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/amazing-feature`

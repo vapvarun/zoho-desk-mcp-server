@@ -66,10 +66,20 @@ export class ZohoDeskServer {
             return await this.handleCreateTicket(toolArgs);
           case 'zoho_update_ticket':
             return await this.handleUpdateTicket(toolArgs);
+          case 'zoho_move_ticket':
+            return await this.handleMoveTicket(toolArgs);
           case 'zoho_reply_ticket':
             return await this.handleReplyTicket(toolArgs);
           case 'zoho_delete_ticket':
             return await this.handleDeleteTicket(toolArgs);
+
+          /* ===========================
+           * TICKET COMMENTS
+           * =========================== */
+          case 'zoho_list_ticket_comments':
+            return await this.handleListTicketComments(toolArgs);
+          case 'zoho_add_ticket_comment':
+            return await this.handleAddTicketComment(toolArgs);
 
           /* ===========================
            * TICKET TAGS
@@ -189,8 +199,22 @@ export class ZohoDeskServer {
     if (args.status) updateData.status = args.status;
     if (args.priority) updateData.priority = args.priority;
     if (args.assignee_id) updateData.assigneeId = args.assignee_id;
+    if (args.department_id) updateData.departmentId = args.department_id;
 
     const response = await this.zohoAPI.updateTicket(args.ticket_id, updateData);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleMoveTicket(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.moveTicket(args.ticket_id, args.department_id);
 
     return {
       content: [
@@ -227,6 +251,44 @@ export class ZohoDeskServer {
         {
           type: 'text',
           text: `Ticket ${args.ticket_id} deleted successfully`,
+        } as TextContent,
+      ],
+    };
+  }
+
+  /* ===========================
+   * TICKET COMMENT HANDLERS
+   * =========================== */
+
+  private async handleListTicketComments(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTicketComments(args.ticket_id, {
+      limit: args.limit,
+      from: args.from,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleAddTicketComment(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.addTicketComment(
+      args.ticket_id,
+      args.content,
+      args.is_public !== undefined ? args.is_public : false,
+      args.content_type || 'html'
+    );
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
         } as TextContent,
       ],
     };

@@ -167,8 +167,13 @@ export class ZohoAPI {
     priority?: string;
     status?: string;
     assigneeId?: string;
+    departmentId?: string;
   }) {
     return this.patch(`/tickets/${ticketId}`, data);
+  }
+
+  async moveTicket(ticketId: string, departmentId: string) {
+    return this.post(`/tickets/${ticketId}/move`, { departmentId });
   }
 
   async deleteTicket(ticketId: string) {
@@ -187,6 +192,26 @@ export class ZohoAPI {
     return this.post(`/tickets/${ticketId}/threads`, {
       content,
       isPublicReply: isPublic
+    });
+  }
+
+  /* ===========================
+   * TICKET COMMENTS
+   * =========================== */
+
+  async getTicketComments(ticketId: string, params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+
+    return this.get(`/tickets/${ticketId}/comments`, query);
+  }
+
+  async addTicketComment(ticketId: string, content: string, isPublic = false, contentType = 'html') {
+    return this.post(`/tickets/${ticketId}/comments`, {
+      content,
+      isPublic,
+      contentType
     });
   }
 

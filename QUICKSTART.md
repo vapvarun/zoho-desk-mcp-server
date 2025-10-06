@@ -9,7 +9,7 @@ Your Zoho Desk MCP Server is now installed and configured with your Zoho credent
 1. ✅ **Credentials Configured** - Access tokens and org ID set up
 2. ✅ **Server Built** - TypeScript compiled to JavaScript
 3. ✅ **Claude Desktop Configured** - MCP server added to Claude Desktop
-4. ✅ **Ready to Use** - All 17 Zoho Desk tools are now available
+4. ✅ **Ready to Use** - All 20 Zoho Desk tools are now available
 
 ## 🔄 Next Steps
 
@@ -57,15 +57,20 @@ Your configuration is loaded from:
 **Access Token:** Loaded from environment variable in Claude config
 **Organization ID:** `657932157`
 
-## 🛠 Available Tools (17)
+## 🛠 Available Tools (20)
 
-### Ticket Management (6 tools)
+### Ticket Management (7 tools)
 - `zoho_list_tickets` - List tickets with filters
-- `zoho_get_ticket` - Get ticket details with threads
+- `zoho_get_ticket` - Get ticket with ALL threaded replies (automatic)
 - `zoho_create_ticket` - Create new support ticket
-- `zoho_update_ticket` - Update ticket status/priority/assignee
+- `zoho_update_ticket` - Update ticket status/priority/assignee/department
+- `zoho_move_ticket` - Move/transfer ticket to different department
 - `zoho_reply_ticket` - Add reply or private note
 - `zoho_delete_ticket` - Delete/trash a ticket
+
+### Ticket Comments (2 tools)
+- `zoho_list_ticket_comments` - List all comments on a ticket
+- `zoho_add_ticket_comment` - Add internal or public comment to ticket
 
 ### Ticket Tags (2 tools)
 - `zoho_get_ticket_tags` - Get all tags for a ticket
@@ -182,9 +187,31 @@ Check Claude Desktop logs:
 tail -f ~/Library/Logs/Claude/mcp*.log
 ```
 
+## 🤖 Bonus: Automated Slack Summaries
+
+Send daily ticket summaries to Slack automatically!
+
+```bash
+# Setup (one time)
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+
+# Test
+cd automation
+node combined-summary-slack.js
+
+# Schedule (daily at 9 AM)
+crontab -e
+# Add: 0 9 * * * cd /path/to/automation && node combined-summary-slack.js
+```
+
+See `automation/README.md` for complete guide.
+
+---
+
 ## 📚 Documentation
 
 - **README:** Full documentation in `README.md`
+- **Automation:** Setup guide in `automation/README.md`
 - **Zoho Desk API:** https://desk.zoho.com/support/APIDocument.do
 
 ## 🎉 You're All Set!

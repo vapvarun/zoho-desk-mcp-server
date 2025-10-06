@@ -87,7 +87,7 @@ export const tools: Tool[] = [
   },
   {
     name: 'zoho_update_ticket',
-    description: 'Update ticket details (status, priority, assignee, etc.)',
+    description: 'Update ticket details (status, priority, assignee, department, etc.)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -106,9 +106,31 @@ export const tools: Tool[] = [
         assignee_id: {
           type: 'string',
           description: 'Assign to agent ID'
+        },
+        department_id: {
+          type: 'string',
+          description: 'Move ticket to department ID'
         }
       },
       required: ['ticket_id']
+    }
+  },
+  {
+    name: 'zoho_move_ticket',
+    description: 'Move/transfer a ticket to a different department',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: {
+          type: 'string',
+          description: 'Ticket ID'
+        },
+        department_id: {
+          type: 'string',
+          description: 'Target department ID to move ticket to'
+        }
+      },
+      required: ['ticket_id', 'department_id']
     }
   },
   {
@@ -146,6 +168,61 @@ export const tools: Tool[] = [
         }
       },
       required: ['ticket_id']
+    }
+  },
+
+  /* ===========================
+   * TICKET COMMENTS
+   * =========================== */
+  {
+    name: 'zoho_list_ticket_comments',
+    description: 'List all comments on a ticket',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: {
+          type: 'string',
+          description: 'Ticket ID'
+        },
+        limit: {
+          type: 'number',
+          description: 'Number of comments to retrieve (1-100, default 50)'
+        },
+        from: {
+          type: 'number',
+          description: 'Starting index for pagination'
+        }
+      },
+      required: ['ticket_id']
+    }
+  },
+  {
+    name: 'zoho_add_ticket_comment',
+    description: 'Add a comment to a ticket (internal note or public comment)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: {
+          type: 'string',
+          description: 'Ticket ID'
+        },
+        content: {
+          type: 'string',
+          description: 'Comment content (supports HTML)'
+        },
+        is_public: {
+          type: 'boolean',
+          description: 'Public comment visible to customer (true) or private note (false)',
+          default: false
+        },
+        content_type: {
+          type: 'string',
+          enum: ['html', 'plainText'],
+          description: 'Content format type',
+          default: 'html'
+        }
+      },
+      required: ['ticket_id', 'content']
     }
   },
 
