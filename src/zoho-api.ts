@@ -28,10 +28,27 @@ export class ZohoAPI {
 
   private accessToken: string;
   private orgId: string;
+  private refreshToken?: string;
+  private clientId?: string;
+  private clientSecret?: string;
+  private onTokenRefresh?: (newToken: string) => void;
 
-  constructor(accessToken: string, orgId: string) {
+  constructor(
+    accessToken: string,
+    orgId: string,
+    options?: {
+      refreshToken?: string;
+      clientId?: string;
+      clientSecret?: string;
+      onTokenRefresh?: (newToken: string) => void;
+    }
+  ) {
     this.accessToken = accessToken;
     this.orgId = orgId;
+    this.refreshToken = options?.refreshToken;
+    this.clientId = options?.clientId;
+    this.clientSecret = options?.clientSecret;
+    this.onTokenRefresh = options?.onTokenRefresh;
   }
 
   /* ===========================
@@ -66,7 +83,8 @@ export class ZohoAPI {
     method: string,
     endpoint: string,
     data?: any,
-    query?: Record<string, string>
+    query?: Record<string, string>,
+    retryCount = 0
   ): Promise<ZohoResponse<T>> {
     let url = `${ZohoAPI.API_BASE}${endpoint}`;
 
@@ -93,6 +111,34 @@ export class ZohoAPI {
     try {
       const response = await fetch(url, options);
       const responseData = await response.json().catch(() => ({}));
+
+      // Check for authentication errors
+      if ((response.status === 401 || response.status === 403) && retryCount === 0) {
+        // Try to refresh token automatically
+        if (this.refreshToken && this.clientId && this.clientSecret) {
+          console.error('🔄 Access token expired, refreshing automatically...');
+          const tokenResponse = await ZohoAPI.refreshAccessToken(
+            this.clientId,
+            this.clientSecret,
+            this.refreshToken
+          );
+
+          if (tokenResponse?.access_token) {
+            this.accessToken = tokenResponse.access_token;
+            console.error('✅ Token refreshed successfully, retrying request...');
+
+            // Notify about token refresh
+            if (this.onTokenRefresh) {
+              this.onTokenRefresh(tokenResponse.access_token);
+            }
+
+            // Retry the request with new token
+            return this.request<T>(method, endpoint, data, query, retryCount + 1);
+          } else {
+            console.error('❌ Token refresh failed');
+          }
+        }
+      }
 
       return {
         code: response.status,

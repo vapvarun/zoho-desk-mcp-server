@@ -184,6 +184,17 @@ node build/index.js
 
 ## 🤖 Automation & Slack Integration
 
+### Real-Time Notifications (via Claude MCP)
+
+Get instant Slack notifications when you reply or comment on tickets **through Claude AI**:
+- 💬 **Ticket Replies** - Notified when you reply via MCP
+- 💭 **Comments** - Notified when you add comments via MCP
+- 🔒 **Privacy Aware** - Shows whether reply/comment is public or private
+- 🎫 **Ticket Context** - Includes ticket #, subject, status, priority
+- ⚡ **Instant** - No delay, sent immediately after action
+
+**No webhook setup required!** Notifications are sent automatically when using Claude to interact with tickets.
+
 ### Automated Daily Summaries
 
 Send **OPEN** Zoho Desk ticket summaries to Slack automatically with smart filtering.
@@ -197,12 +208,18 @@ Send **OPEN** Zoho Desk ticket summaries to Slack automatically with smart filte
 - 📋 Recent tickets list (top 5)
 - 🎯 Customizable filters and schedules
 
-**Quick Setup:**
+**Real-Time Notifications Setup:**
+1. Slack webhook URL already configured in `config.json` ✅
+2. Restart Claude Desktop
+3. Use Claude to reply/comment on tickets
+4. Get instant Slack notifications!
+
+**See:** [`SLACK_NOTIFICATIONS.md`](SLACK_NOTIFICATIONS.md) for complete guide.
+
+**Scheduled Summaries Setup:**
 
 ```bash
-# Configure Slack webhook
-export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
-
+# Configure Slack webhook (already done!)
 # Test manually
 cd automation
 node ticket-summary-slack.js

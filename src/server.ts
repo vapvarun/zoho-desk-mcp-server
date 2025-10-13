@@ -24,6 +24,7 @@ export class ZohoDeskServer {
   private server: Server;
   private zohoAPI: ZohoAPI;
   private config: any;
+  private slackWebhookUrl: string | null;
 
   constructor() {
     this.server = new Server(
@@ -39,7 +40,16 @@ export class ZohoDeskServer {
     );
 
     this.config = loadConfig();
-    this.zohoAPI = new ZohoAPI(this.config.accessToken, this.config.orgId);
+    this.zohoAPI = new ZohoAPI(this.config.accessToken, this.config.orgId, {
+      refreshToken: this.config.refreshToken,
+      clientId: this.config.clientId,
+      clientSecret: this.config.clientSecret,
+      onTokenRefresh: (newToken: string) => {
+        console.error('📝 New token available:', newToken.substring(0, 20) + '...');
+        console.error('⚠️  Update your config files with the new token');
+      }
+    });
+    this.slackWebhookUrl = this.config.slackWebhookUrl || process.env.SLACK_WEBHOOK_URL || null;
 
     this.setupHandlers();
   }
@@ -233,6 +243,21 @@ export class ZohoDeskServer {
       args.is_public !== false
     );
 
+    // Send Slack notification
+    if (this.slackWebhookUrl) {
+      try {
+        const ticket = await this.zohoAPI.getTicket(args.ticket_id);
+        await this.sendSlackNotification({
+          type: 'reply',
+          ticket: ticket.data,
+          content: args.content,
+          isPublic: args.is_public !== false
+        });
+      } catch (error) {
+        console.error('Failed to send Slack notification:', error);
+      }
+    }
+
     return {
       content: [
         {
@@ -283,6 +308,21 @@ export class ZohoDeskServer {
       args.is_public !== undefined ? args.is_public : false,
       args.content_type || 'html'
     );
+
+    // Send Slack notification
+    if (this.slackWebhookUrl) {
+      try {
+        const ticket = await this.zohoAPI.getTicket(args.ticket_id);
+        await this.sendSlackNotification({
+          type: 'comment',
+          ticket: ticket.data,
+          content: args.content,
+          isPublic: args.is_public !== undefined ? args.is_public : false
+        });
+      } catch (error) {
+        console.error('Failed to send Slack notification:', error);
+      }
+    }
 
     return {
       content: [
@@ -429,6 +469,94 @@ export class ZohoDeskServer {
         } as TextContent,
       ],
     };
+  }
+
+  /* ===========================
+   * SLACK NOTIFICATION
+   * =========================== */
+
+  private async sendSlackNotification(data: {
+    type: 'reply' | 'comment';
+    ticket: any;
+    content: string;
+    isPublic: boolean;
+  }): Promise<void> {
+    if (!this.slackWebhookUrl) {
+      return;
+    }
+
+    const { type, ticket, content, isPublic } = data;
+
+    // Clean HTML from content for Slack
+    const cleanContent = content
+      .replace(/<[^>]*>/g, '')
+      .substring(0, 500);
+
+    let emoji = '';
+    let title = '';
+    if (type === 'reply') {
+      emoji = isPublic ? '💬' : '🔒';
+      title = isPublic ? 'New Ticket Reply (via Claude)' : 'Private Reply (via Claude)';
+    } else {
+      emoji = isPublic ? '💭' : '🔒';
+      title = isPublic ? 'Public Comment Added (via Claude)' : 'Private Note Added (via Claude)';
+    }
+
+    const message = {
+      blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: `${emoji} ${title}`,
+            emoji: true,
+          },
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: `*Ticket:*\n#${ticket.ticketNumber} - ${ticket.subject}`,
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Status:*\n${ticket.status}`,
+            },
+          ],
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*${type === 'reply' ? 'Reply' : 'Comment'}:*\n${cleanContent}${content.length > 500 ? '...' : ''}`,
+          },
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: `Priority: ${ticket.priority || 'None'} | ${new Date().toLocaleString()}`,
+            },
+          ],
+        },
+      ],
+    };
+
+    try {
+      const response = await fetch(this.slackWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(message),
+      });
+
+      if (!response.ok) {
+        console.error('Slack notification failed:', response.status);
+      }
+    } catch (error) {
+      console.error('Failed to send Slack notification:', error);
+    }
   }
 
   /* ===========================
