@@ -235,18 +235,37 @@ crontab -e
 
 ## 🛠️ Available Tools
 
-### Ticket Management (7 tools)
-- `zoho_list_tickets` - List tickets with filters
-- `zoho_get_ticket` - Get ticket details with all threaded replies (automatic)
+### Ticket Management (12 tools)
+- `zoho_list_tickets` - List tickets with filters (status, priority, date)
+- `zoho_list_open_tickets` - Quick access to all open tickets
+- `zoho_get_ticket` - Get ticket details with threaded replies
+- `zoho_get_ticket_full` - Get complete ticket with ALL threads AND comments
+- `zoho_get_thread` - Get a specific conversation thread
+- `zoho_get_latest_thread` - Get most recent message on a ticket
 - `zoho_create_ticket` - Create new support ticket
 - `zoho_update_ticket` - Update ticket status/priority/assignee/department
 - `zoho_move_ticket` - Move/transfer ticket to different department
 - `zoho_reply_ticket` - Add reply or private note
 - `zoho_delete_ticket` - Delete/trash a ticket
+- `zoho_search_tickets` - Full-text ticket search
+
+### Ticket History & Metrics (2 tools)
+- `zoho_get_ticket_history` - Get audit trail/activity history
+- `zoho_get_ticket_metrics` - Get response times, resolution metrics
+
+### Ticket Attachments (2 tools)
+- `zoho_list_ticket_attachments` - List all attachments on a ticket
+- `zoho_delete_ticket_attachment` - Remove attachment from ticket
+
+### Bulk Operations (4 tools)
+- `zoho_bulk_close_tickets` - Close multiple tickets at once
+- `zoho_mark_tickets_read` - Mark multiple tickets as read
+- `zoho_mark_tickets_unread` - Mark multiple tickets as unread
+- `zoho_trash_tickets` - Move multiple tickets to trash
 
 ### Ticket Comments (2 tools)
 - `zoho_list_ticket_comments` - List all comments on a ticket
-- `zoho_add_ticket_comment` - Add internal or public comment to ticket
+- `zoho_add_ticket_comment` - Add internal or public comment
 
 ### Ticket Tags (2 tools)
 - `zoho_get_ticket_tags` - Get all tags for a ticket
@@ -257,32 +276,65 @@ crontab -e
 - `zoho_get_contact` - Get contact details
 - `zoho_get_contact_tickets` - Get customer's ticket history
 
+### Accounts/Companies (7 tools)
+- `zoho_list_accounts` - List all company accounts
+- `zoho_get_account` - Get account details
+- `zoho_create_account` - Create new account
+- `zoho_update_account` - Update account info
+- `zoho_delete_account` - Delete an account
+- `zoho_get_account_tickets` - Get all tickets for an account
+- `zoho_get_account_contacts` - Get contacts in an account
+
+### Time Tracking (5 tools)
+- `zoho_list_ticket_time_entries` - List time entries on a ticket
+- `zoho_add_ticket_time_entry` - Log time spent on ticket
+- `zoho_update_ticket_time_entry` - Update time entry
+- `zoho_delete_ticket_time_entry` - Remove time entry
+- `zoho_get_ticket_time_summary` - Get total time summary
+
+### Tasks (6 tools)
+- `zoho_list_tasks` - List all tasks
+- `zoho_get_task` - Get task details
+- `zoho_create_task` - Create new task
+- `zoho_update_task` - Update task
+- `zoho_delete_task` - Delete task
+- `zoho_list_ticket_tasks` - Get tasks linked to a ticket
+
+### Products (2 tools)
+- `zoho_list_products` - List all products
+- `zoho_get_product` - Get product details
+
 ### Departments & Agents (3 tools)
 - `zoho_list_departments` - List all departments
 - `zoho_list_agents` - List all support agents
 - `zoho_get_agent` - Get agent profile
 
-### Search (1 tool)
-- `zoho_search_tickets` - Full-text ticket search
-
-**Total: 20 powerful AI tools**
+**Total: 50 AI-powered tools**
 
 ---
 
 ## 📚 API Coverage
 
-This MCP server implements the complete Zoho Desk API v1:
+This MCP server implements comprehensive Zoho Desk API v1 coverage:
 
-- ✅ Tickets API - Full CRUD operations
-- ✅ Ticket Threads API - Conversations and replies
+- ✅ Tickets API - Full CRUD + bulk operations
+- ✅ Ticket Threads API - Conversations, replies, latest thread
+- ✅ Ticket Comments API - Internal notes and public comments
 - ✅ Ticket Tags API - Tag management
+- ✅ Ticket Attachments API - List and delete attachments
+- ✅ Ticket History API - Audit trail and activity log
+- ✅ Ticket Metrics API - Response and resolution times
 - ✅ Contacts API - Customer management
+- ✅ Accounts API - Company/organization management
+- ✅ Time Entries API - Time tracking and billing
+- ✅ Tasks API - Task management linked to tickets
+- ✅ Products API - Product catalog access
 - ✅ Departments API - Organization structure
 - ✅ Agents API - Team member access
 - ✅ Search API - Advanced ticket search
-- ✅ OAuth 2.0 - Token refresh support
+- ✅ OAuth 2.0 - Automatic token refresh
 
-**API Documentation**: [Zoho Desk API Reference](https://desk.zoho.com/support/APIDocument.do)
+**API Documentation**: [Zoho Desk API Reference](https://desk.zoho.com/DeskAPIDocument)
 
 ---
 
