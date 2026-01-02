@@ -230,8 +230,20 @@ export class ZohoAPI {
    * TICKET THREADS/CONVERSATIONS
    * =========================== */
 
-  async getTicketThreads(ticketId: string) {
-    return this.get(`/tickets/${ticketId}/threads`);
+  async getTicketThreads(ticketId: string, params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+
+    return this.get(`/tickets/${ticketId}/threads`, query);
+  }
+
+  async getTicketThread(ticketId: string, threadId: string) {
+    return this.get(`/tickets/${ticketId}/threads/${threadId}`);
+  }
+
+  async getLatestThread(ticketId: string) {
+    return this.get(`/tickets/${ticketId}/latestThread`);
   }
 
   async addTicketReply(ticketId: string, content: string, isPublic = true) {
@@ -239,6 +251,29 @@ export class ZohoAPI {
       content,
       isPublicReply: isPublic
     });
+  }
+
+  /* ===========================
+   * TICKET FULL CONTEXT (Combined)
+   * =========================== */
+
+  async getTicketFullContext(ticketId: string) {
+    // Fetch ticket, threads, and comments in parallel
+    const [ticketRes, threadsRes, commentsRes] = await Promise.all([
+      this.get(`/tickets/${ticketId}`),
+      this.get(`/tickets/${ticketId}/threads`),
+      this.get(`/tickets/${ticketId}/comments`)
+    ]);
+
+    return {
+      code: ticketRes.code,
+      data: {
+        ...ticketRes.data,
+        threads: threadsRes.data?.data || threadsRes.data || [],
+        comments: commentsRes.data?.data || commentsRes.data || []
+      },
+      headers: ticketRes.headers
+    };
   }
 
   /* ===========================
@@ -342,5 +377,220 @@ export class ZohoAPI {
 
   setOrgId(orgId: string): void {
     this.orgId = orgId;
+  }
+
+  /* ===========================
+   * TICKET ATTACHMENTS
+   * =========================== */
+
+  async getTicketAttachments(ticketId: string) {
+    return this.get(`/tickets/${ticketId}/attachments`);
+  }
+
+  async deleteTicketAttachment(ticketId: string, attachmentId: string) {
+    return this.delete(`/tickets/${ticketId}/attachments/${attachmentId}`);
+  }
+
+  /* ===========================
+   * TICKET HISTORY
+   * =========================== */
+
+  async getTicketHistory(ticketId: string, params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+
+    return this.get(`/tickets/${ticketId}/history`, query);
+  }
+
+  /* ===========================
+   * TICKET METRICS
+   * =========================== */
+
+  async getTicketMetrics(ticketId: string) {
+    return this.get(`/tickets/${ticketId}/metrics`);
+  }
+
+  /* ===========================
+   * BULK TICKET OPERATIONS
+   * =========================== */
+
+  async closeTickets(ticketIds: string[]) {
+    return this.post('/tickets/close', { ids: ticketIds });
+  }
+
+  async markTicketsRead(ticketIds: string[]) {
+    return this.post('/tickets/read', { ids: ticketIds });
+  }
+
+  async markTicketsUnread(ticketIds: string[]) {
+    return this.post('/tickets/unread', { ids: ticketIds });
+  }
+
+  async trashTickets(ticketIds: string[]) {
+    return this.post('/tickets/trash', { ids: ticketIds });
+  }
+
+  /* ===========================
+   * ACCOUNTS
+   * =========================== */
+
+  async getAccounts(params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+
+    return this.get('/accounts', query);
+  }
+
+  async getAccount(accountId: string) {
+    return this.get(`/accounts/${accountId}`);
+  }
+
+  async createAccount(data: {
+    accountName: string;
+    email?: string;
+    phone?: string;
+    website?: string;
+    description?: string;
+  }) {
+    return this.post('/accounts', data);
+  }
+
+  async updateAccount(accountId: string, data: {
+    accountName?: string;
+    email?: string;
+    phone?: string;
+    website?: string;
+    description?: string;
+  }) {
+    return this.patch(`/accounts/${accountId}`, data);
+  }
+
+  async deleteAccount(accountId: string) {
+    return this.delete(`/accounts/${accountId}`);
+  }
+
+  async getAccountTickets(accountId: string, params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+
+    return this.get(`/accounts/${accountId}/tickets`, query);
+  }
+
+  async getAccountContacts(accountId: string, params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+
+    return this.get(`/accounts/${accountId}/contacts`, query);
+  }
+
+  /* ===========================
+   * TIME ENTRIES
+   * =========================== */
+
+  async getTicketTimeEntries(ticketId: string, params?: { limit?: number; from?: number; billingType?: string }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+    if (params?.billingType) query.billingType = params.billingType;
+
+    return this.get(`/tickets/${ticketId}/timeEntries`, query);
+  }
+
+  async addTicketTimeEntry(ticketId: string, data: {
+    executedTime: string;  // Format: "HH:MM" or minutes
+    ownerId?: string;
+    description?: string;
+    billingType?: 'Billable' | 'Non Billable';
+  }) {
+    return this.post(`/tickets/${ticketId}/timeEntries`, data);
+  }
+
+  async updateTicketTimeEntry(ticketId: string, timeEntryId: string, data: {
+    executedTime?: string;
+    description?: string;
+    billingType?: 'Billable' | 'Non Billable';
+  }) {
+    return this.patch(`/tickets/${ticketId}/timeEntries/${timeEntryId}`, data);
+  }
+
+  async deleteTicketTimeEntry(ticketId: string, timeEntryId: string) {
+    return this.delete(`/tickets/${ticketId}/timeEntries/${timeEntryId}`);
+  }
+
+  async getTicketTimeEntrySummary(ticketId: string) {
+    return this.get(`/tickets/${ticketId}/timeEntries/summation`);
+  }
+
+  /* ===========================
+   * TASKS
+   * =========================== */
+
+  async getTasks(params?: { limit?: number; from?: number; status?: string }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+    if (params?.status) query.status = params.status;
+
+    return this.get('/tasks', query);
+  }
+
+  async getTask(taskId: string) {
+    return this.get(`/tasks/${taskId}`);
+  }
+
+  async createTask(data: {
+    subject: string;
+    departmentId?: string;
+    description?: string;
+    dueDate?: string;
+    priority?: string;
+    status?: string;
+    ownerId?: string;
+    ticketId?: string;
+  }) {
+    return this.post('/tasks', data);
+  }
+
+  async updateTask(taskId: string, data: {
+    subject?: string;
+    description?: string;
+    dueDate?: string;
+    priority?: string;
+    status?: string;
+    ownerId?: string;
+  }) {
+    return this.patch(`/tasks/${taskId}`, data);
+  }
+
+  async deleteTask(taskId: string) {
+    return this.delete(`/tasks/${taskId}`);
+  }
+
+  async getTicketTasks(ticketId: string, params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+
+    return this.get(`/tickets/${ticketId}/tasks`, query);
+  }
+
+  /* ===========================
+   * PRODUCTS
+   * =========================== */
+
+  async getProducts(params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+
+    return this.get('/products', query);
+  }
+
+  async getProduct(productId: string) {
+    return this.get(`/products/${productId}`);
   }
 }

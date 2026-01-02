@@ -72,6 +72,14 @@ export class ZohoDeskServer {
             return await this.handleListTickets(toolArgs);
           case 'zoho_get_ticket':
             return await this.handleGetTicket(toolArgs);
+          case 'zoho_get_ticket_full':
+            return await this.handleGetTicketFull(toolArgs);
+          case 'zoho_list_open_tickets':
+            return await this.handleListOpenTickets(toolArgs);
+          case 'zoho_get_thread':
+            return await this.handleGetThread(toolArgs);
+          case 'zoho_get_latest_thread':
+            return await this.handleGetLatestThread(toolArgs);
           case 'zoho_create_ticket':
             return await this.handleCreateTicket(toolArgs);
           case 'zoho_update_ticket':
@@ -124,6 +132,90 @@ export class ZohoDeskServer {
            * =========================== */
           case 'zoho_search_tickets':
             return await this.handleSearchTickets(toolArgs);
+
+          /* ===========================
+           * TICKET ATTACHMENTS
+           * =========================== */
+          case 'zoho_list_ticket_attachments':
+            return await this.handleListTicketAttachments(toolArgs);
+          case 'zoho_delete_ticket_attachment':
+            return await this.handleDeleteTicketAttachment(toolArgs);
+
+          /* ===========================
+           * TICKET HISTORY & METRICS
+           * =========================== */
+          case 'zoho_get_ticket_history':
+            return await this.handleGetTicketHistory(toolArgs);
+          case 'zoho_get_ticket_metrics':
+            return await this.handleGetTicketMetrics(toolArgs);
+
+          /* ===========================
+           * BULK TICKET OPERATIONS
+           * =========================== */
+          case 'zoho_bulk_close_tickets':
+            return await this.handleBulkCloseTickets(toolArgs);
+          case 'zoho_mark_tickets_read':
+            return await this.handleMarkTicketsRead(toolArgs);
+          case 'zoho_mark_tickets_unread':
+            return await this.handleMarkTicketsUnread(toolArgs);
+          case 'zoho_trash_tickets':
+            return await this.handleTrashTickets(toolArgs);
+
+          /* ===========================
+           * ACCOUNTS
+           * =========================== */
+          case 'zoho_list_accounts':
+            return await this.handleListAccounts(toolArgs);
+          case 'zoho_get_account':
+            return await this.handleGetAccount(toolArgs);
+          case 'zoho_create_account':
+            return await this.handleCreateAccount(toolArgs);
+          case 'zoho_update_account':
+            return await this.handleUpdateAccount(toolArgs);
+          case 'zoho_delete_account':
+            return await this.handleDeleteAccount(toolArgs);
+          case 'zoho_get_account_tickets':
+            return await this.handleGetAccountTickets(toolArgs);
+          case 'zoho_get_account_contacts':
+            return await this.handleGetAccountContacts(toolArgs);
+
+          /* ===========================
+           * TIME ENTRIES
+           * =========================== */
+          case 'zoho_list_ticket_time_entries':
+            return await this.handleListTicketTimeEntries(toolArgs);
+          case 'zoho_add_ticket_time_entry':
+            return await this.handleAddTicketTimeEntry(toolArgs);
+          case 'zoho_update_ticket_time_entry':
+            return await this.handleUpdateTicketTimeEntry(toolArgs);
+          case 'zoho_delete_ticket_time_entry':
+            return await this.handleDeleteTicketTimeEntry(toolArgs);
+          case 'zoho_get_ticket_time_summary':
+            return await this.handleGetTicketTimeSummary(toolArgs);
+
+          /* ===========================
+           * TASKS
+           * =========================== */
+          case 'zoho_list_tasks':
+            return await this.handleListTasks(toolArgs);
+          case 'zoho_get_task':
+            return await this.handleGetTask(toolArgs);
+          case 'zoho_create_task':
+            return await this.handleCreateTask(toolArgs);
+          case 'zoho_update_task':
+            return await this.handleUpdateTask(toolArgs);
+          case 'zoho_delete_task':
+            return await this.handleDeleteTask(toolArgs);
+          case 'zoho_list_ticket_tasks':
+            return await this.handleListTicketTasks(toolArgs);
+
+          /* ===========================
+           * PRODUCTS
+           * =========================== */
+          case 'zoho_list_products':
+            return await this.handleListProducts(toolArgs);
+          case 'zoho_get_product':
+            return await this.handleGetProduct(toolArgs);
 
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -180,6 +272,62 @@ export class ZohoDeskServer {
         {
           type: 'text',
           text: JSON.stringify(result, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleGetTicketFull(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTicketFullContext(args.ticket_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleListOpenTickets(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTickets({
+      status: 'Open',
+      limit: args.limit,
+      sortBy: args.sort_by || 'modifiedTime',
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleGetThread(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTicketThread(args.ticket_id, args.thread_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleGetLatestThread(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getLatestThread(args.ticket_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
         } as TextContent,
       ],
     };
@@ -460,6 +608,460 @@ export class ZohoDeskServer {
     const response = await this.zohoAPI.searchTickets(args.query, {
       limit: args.limit,
     });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  /* ===========================
+   * TICKET ATTACHMENT HANDLERS
+   * =========================== */
+
+  private async handleListTicketAttachments(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTicketAttachments(args.ticket_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleDeleteTicketAttachment(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.deleteTicketAttachment(args.ticket_id, args.attachment_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Attachment ${args.attachment_id} deleted successfully`,
+        } as TextContent,
+      ],
+    };
+  }
+
+  /* ===========================
+   * TICKET HISTORY & METRICS HANDLERS
+   * =========================== */
+
+  private async handleGetTicketHistory(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTicketHistory(args.ticket_id, {
+      limit: args.limit,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleGetTicketMetrics(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTicketMetrics(args.ticket_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  /* ===========================
+   * BULK TICKET OPERATION HANDLERS
+   * =========================== */
+
+  private async handleBulkCloseTickets(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.closeTickets(args.ticket_ids);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleMarkTicketsRead(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.markTicketsRead(args.ticket_ids);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleMarkTicketsUnread(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.markTicketsUnread(args.ticket_ids);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleTrashTickets(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.trashTickets(args.ticket_ids);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  /* ===========================
+   * ACCOUNT HANDLERS
+   * =========================== */
+
+  private async handleListAccounts(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getAccounts({
+      limit: args.limit,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleGetAccount(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getAccount(args.account_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleCreateAccount(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.createAccount({
+      accountName: args.account_name,
+      email: args.email,
+      phone: args.phone,
+      website: args.website,
+      description: args.description,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleUpdateAccount(args: any): Promise<CallToolResult> {
+    const updateData: any = {};
+    if (args.account_name) updateData.accountName = args.account_name;
+    if (args.email) updateData.email = args.email;
+    if (args.phone) updateData.phone = args.phone;
+    if (args.website) updateData.website = args.website;
+    if (args.description) updateData.description = args.description;
+
+    const response = await this.zohoAPI.updateAccount(args.account_id, updateData);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleDeleteAccount(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.deleteAccount(args.account_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Account ${args.account_id} deleted successfully`,
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleGetAccountTickets(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getAccountTickets(args.account_id, {
+      limit: args.limit,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleGetAccountContacts(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getAccountContacts(args.account_id, {
+      limit: args.limit,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  /* ===========================
+   * TIME ENTRY HANDLERS
+   * =========================== */
+
+  private async handleListTicketTimeEntries(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTicketTimeEntries(args.ticket_id, {
+      limit: args.limit,
+      billingType: args.billing_type,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleAddTicketTimeEntry(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.addTicketTimeEntry(args.ticket_id, {
+      executedTime: args.executed_time,
+      description: args.description,
+      billingType: args.billing_type,
+      ownerId: args.owner_id,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleUpdateTicketTimeEntry(args: any): Promise<CallToolResult> {
+    const updateData: any = {};
+    if (args.executed_time) updateData.executedTime = args.executed_time;
+    if (args.description) updateData.description = args.description;
+    if (args.billing_type) updateData.billingType = args.billing_type;
+
+    const response = await this.zohoAPI.updateTicketTimeEntry(
+      args.ticket_id,
+      args.time_entry_id,
+      updateData
+    );
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleDeleteTicketTimeEntry(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.deleteTicketTimeEntry(args.ticket_id, args.time_entry_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Time entry ${args.time_entry_id} deleted successfully`,
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleGetTicketTimeSummary(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTicketTimeEntrySummary(args.ticket_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  /* ===========================
+   * TASK HANDLERS
+   * =========================== */
+
+  private async handleListTasks(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTasks({
+      limit: args.limit,
+      status: args.status,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleGetTask(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTask(args.task_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleCreateTask(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.createTask({
+      subject: args.subject,
+      description: args.description,
+      dueDate: args.due_date,
+      priority: args.priority,
+      status: args.status,
+      ownerId: args.owner_id,
+      ticketId: args.ticket_id,
+      departmentId: args.department_id,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleUpdateTask(args: any): Promise<CallToolResult> {
+    const updateData: any = {};
+    if (args.subject) updateData.subject = args.subject;
+    if (args.description) updateData.description = args.description;
+    if (args.due_date) updateData.dueDate = args.due_date;
+    if (args.priority) updateData.priority = args.priority;
+    if (args.status) updateData.status = args.status;
+    if (args.owner_id) updateData.ownerId = args.owner_id;
+
+    const response = await this.zohoAPI.updateTask(args.task_id, updateData);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleDeleteTask(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.deleteTask(args.task_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Task ${args.task_id} deleted successfully`,
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleListTicketTasks(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getTicketTasks(args.ticket_id, {
+      limit: args.limit,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  /* ===========================
+   * PRODUCT HANDLERS
+   * =========================== */
+
+  private async handleListProducts(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getProducts({
+      limit: args.limit,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleGetProduct(args: any): Promise<CallToolResult> {
+    const response = await this.zohoAPI.getProduct(args.product_id);
 
     return {
       content: [
