@@ -50,13 +50,33 @@ OLD_TOKEN=$(grep '"accessToken"' "$CONFIG_FILE" | sed 's/.*: "\(.*\)".*/\1/')
 sed -i '' "s|$OLD_TOKEN|$NEW_TOKEN|g" "$CONFIG_FILE"
 
 # Update Claude Desktop config
-CLAUDE_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
-if [ -f "$CLAUDE_CONFIG" ]; then
+CLAUDE_DESKTOP_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+if [ -f "$CLAUDE_DESKTOP_CONFIG" ]; then
     echo "📝 Updating Claude Desktop config..."
-    sed -i '' "s|$OLD_TOKEN|$NEW_TOKEN|g" "$CLAUDE_CONFIG"
-    echo "✅ Claude Desktop config updated"
+    DESKTOP_OLD_TOKEN=$(grep '"ZOHO_ACCESS_TOKEN"' "$CLAUDE_DESKTOP_CONFIG" | sed 's/.*: "\(.*\)".*/\1/')
+    if [ -n "$DESKTOP_OLD_TOKEN" ]; then
+        sed -i '' "s|$DESKTOP_OLD_TOKEN|$NEW_TOKEN|g" "$CLAUDE_DESKTOP_CONFIG"
+        echo "✅ Claude Desktop config updated"
+    else
+        echo "⚠️  No ZOHO_ACCESS_TOKEN found in Claude Desktop config"
+    fi
 else
-    echo "⚠️  Claude Desktop config not found at: $CLAUDE_CONFIG"
+    echo "⚠️  Claude Desktop config not found"
+fi
+
+# Update Claude Code config
+CLAUDE_CODE_CONFIG="$HOME/.config/claude-code/config.json"
+if [ -f "$CLAUDE_CODE_CONFIG" ]; then
+    echo "📝 Updating Claude Code config..."
+    CODE_OLD_TOKEN=$(grep '"ZOHO_ACCESS_TOKEN"' "$CLAUDE_CODE_CONFIG" | sed 's/.*: "\(.*\)".*/\1/')
+    if [ -n "$CODE_OLD_TOKEN" ]; then
+        sed -i '' "s|$CODE_OLD_TOKEN|$NEW_TOKEN|g" "$CLAUDE_CODE_CONFIG"
+        echo "✅ Claude Code config updated"
+    else
+        echo "⚠️  No ZOHO_ACCESS_TOKEN found in Claude Code config"
+    fi
+else
+    echo "⚠️  Claude Code config not found"
 fi
 
 # Update WordPress if wp-cli is available
@@ -73,7 +93,7 @@ fi
 echo ""
 echo "🎉 Token refresh complete!"
 echo ""
-echo "⚠️  IMPORTANT: Restart Claude Desktop for changes to take effect!"
+echo "⚠️  IMPORTANT: Restart Claude Desktop and Claude Code for changes to take effect!"
 echo ""
 echo "New token expires in: 1 hour (3600 seconds)"
 echo "Run this script again when the token expires."

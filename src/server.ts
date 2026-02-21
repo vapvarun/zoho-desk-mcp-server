@@ -19,18 +19,22 @@ import {
 import { ZohoAPI } from './zoho-api.js';
 import { tools } from './tools.js';
 import { loadConfig } from './config.js';
+import { writeFileSync, readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 
 export class ZohoDeskServer {
   private server: Server;
-  private zohoAPI: ZohoAPI;
+  private zohoAPI!: ZohoAPI;  // Using definite assignment assertion
   private config: any;
   private slackWebhookUrl: string | null;
+  private tokenInitialized = false;
 
   constructor() {
     this.server = new Server(
       {
         name: 'zoho-desk-mcp-server',
-        version: '1.0.0',
+        version: '1.1.0',
       },
       {
         capabilities: {
@@ -40,18 +44,106 @@ export class ZohoDeskServer {
     );
 
     this.config = loadConfig();
-    this.zohoAPI = new ZohoAPI(this.config.accessToken, this.config.orgId, {
-      refreshToken: this.config.refreshToken,
-      clientId: this.config.clientId,
-      clientSecret: this.config.clientSecret,
-      onTokenRefresh: (newToken: string) => {
-        console.error('📝 New token available:', newToken.substring(0, 20) + '...');
-        console.error('⚠️  Update your config files with the new token');
-      }
-    });
     this.slackWebhookUrl = this.config.slackWebhookUrl || process.env.SLACK_WEBHOOK_URL || null;
 
+    // Don't initialize zohoAPI yet - wait for fresh token
+
     this.setupHandlers();
+  }
+
+  private async ensureTokenInitialized(): Promise<void> {
+    if (this.tokenInitialized) {
+      return;
+    }
+
+    console.error('🔄 Initializing Zoho API with fresh token...');
+
+    try {
+      // Try to refresh token first if we have credentials
+      if (this.config.clientId && this.config.clientSecret && this.config.refreshToken) {
+        console.error('🔄 Refreshing access token...');
+        const tokenResponse = await ZohoAPI.refreshAccessToken(
+          this.config.clientId,
+          this.config.clientSecret,
+          this.config.refreshToken
+        );
+
+        if (tokenResponse?.access_token) {
+          this.config.accessToken = tokenResponse.access_token;
+          console.error(`✅ Fresh token obtained: ${tokenResponse.access_token.substring(0, 20)}...`);
+        } else {
+          console.error('⚠️  Token refresh failed, using existing token');
+        }
+      }
+
+      // Create zohoAPI instance with either fresh or existing token
+      this.zohoAPI = new ZohoAPI(this.config.accessToken, this.config.orgId, {
+        refreshToken: this.config.refreshToken,
+        clientId: this.config.clientId,
+        clientSecret: this.config.clientSecret,
+        onTokenRefresh: (newToken: string) => {
+          this.config.accessToken = newToken;
+          console.error('✅ Token auto-refreshed during API call');
+          this.updateTokenInConfigs(newToken);
+        }
+      });
+
+      this.tokenInitialized = true;
+    } catch (error) {
+      console.error('❌ Error initializing token:', error);
+      // Create zohoAPI with existing token as fallback
+      this.zohoAPI = new ZohoAPI(this.config.accessToken || '', this.config.orgId, {
+        refreshToken: this.config.refreshToken,
+        clientId: this.config.clientId,
+        clientSecret: this.config.clientSecret,
+        onTokenRefresh: (newToken: string) => {
+          this.config.accessToken = newToken;
+          console.error('✅ Token auto-refreshed during API call');
+          this.updateTokenInConfigs(newToken);
+        }
+      });
+      this.tokenInitialized = true;
+    }
+  }
+
+  /**
+   * Update token in all config files (local, Claude Desktop, Claude Code)
+   */
+  private updateTokenInConfigs(newToken: string): void {
+    try {
+      // Update local config.json
+      const configPath = join(__dirname, '..', 'config.json');
+      if (existsSync(configPath)) {
+        const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+        config.accessToken = newToken;
+        writeFileSync(configPath, JSON.stringify(config, null, 2));
+        console.error('✅ Updated local config.json');
+      }
+
+      // Update Claude Desktop config
+      const desktopConfigPath = join(homedir(), 'Library/Application Support/Claude/claude_desktop_config.json');
+      if (existsSync(desktopConfigPath)) {
+        const desktopConfig = JSON.parse(readFileSync(desktopConfigPath, 'utf-8'));
+        if (desktopConfig.mcpServers?.['zoho-desk']?.env?.ZOHO_ACCESS_TOKEN) {
+          desktopConfig.mcpServers['zoho-desk'].env.ZOHO_ACCESS_TOKEN = newToken;
+          writeFileSync(desktopConfigPath, JSON.stringify(desktopConfig, null, 2));
+          console.error('✅ Updated Claude Desktop config');
+        }
+      }
+
+      // Update Claude Code config
+      const codeConfigPath = join(homedir(), '.config/claude-code/config.json');
+      if (existsSync(codeConfigPath)) {
+        const codeConfig = JSON.parse(readFileSync(codeConfigPath, 'utf-8'));
+        if (codeConfig.mcpServers?.['zoho-desk']?.env?.ZOHO_ACCESS_TOKEN) {
+          codeConfig.mcpServers['zoho-desk'].env.ZOHO_ACCESS_TOKEN = newToken;
+          writeFileSync(codeConfigPath, JSON.stringify(codeConfig, null, 2));
+          console.error('✅ Updated Claude Code config');
+        }
+      }
+    } catch (error) {
+      console.error('⚠️  Failed to update config files:', error);
+    }
   }
 
   private setupHandlers(): void {
@@ -239,6 +331,8 @@ export class ZohoDeskServer {
    * =========================== */
 
   private async handleListTickets(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+
     const response = await this.zohoAPI.getTickets({
       status: args.status,
       limit: args.limit,
@@ -256,6 +350,7 @@ export class ZohoDeskServer {
   }
 
   private async handleGetTicket(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const ticketResponse = await this.zohoAPI.getTicket(args.ticket_id);
     let result = ticketResponse.data;
 
@@ -334,6 +429,7 @@ export class ZohoDeskServer {
   }
 
   private async handleCreateTicket(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.createTicket({
       subject: args.subject,
       description: args.description,
@@ -353,6 +449,7 @@ export class ZohoDeskServer {
   }
 
   private async handleUpdateTicket(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const updateData: any = {};
     if (args.status) updateData.status = args.status;
     if (args.priority) updateData.priority = args.priority;
@@ -372,6 +469,7 @@ export class ZohoDeskServer {
   }
 
   private async handleMoveTicket(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.moveTicket(args.ticket_id, args.department_id);
 
     return {
@@ -385,6 +483,7 @@ export class ZohoDeskServer {
   }
 
   private async handleReplyTicket(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.addTicketReply(
       args.ticket_id,
       args.content,
@@ -417,6 +516,7 @@ export class ZohoDeskServer {
   }
 
   private async handleDeleteTicket(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.deleteTicket(args.ticket_id);
 
     return {
@@ -434,6 +534,7 @@ export class ZohoDeskServer {
    * =========================== */
 
   private async handleListTicketComments(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.getTicketComments(args.ticket_id, {
       limit: args.limit,
       from: args.from,
@@ -450,6 +551,7 @@ export class ZohoDeskServer {
   }
 
   private async handleAddTicketComment(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.addTicketComment(
       args.ticket_id,
       args.content,
@@ -487,6 +589,7 @@ export class ZohoDeskServer {
    * =========================== */
 
   private async handleGetTicketTags(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.getTicketTags(args.ticket_id);
 
     return {
@@ -500,6 +603,7 @@ export class ZohoDeskServer {
   }
 
   private async handleAddTicketTags(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.addTicketTags(args.ticket_id, args.tags);
 
     return {
@@ -517,6 +621,7 @@ export class ZohoDeskServer {
    * =========================== */
 
   private async handleListContacts(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.getContacts({
       limit: args.limit,
     });
@@ -532,6 +637,7 @@ export class ZohoDeskServer {
   }
 
   private async handleGetContact(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.getContact(args.contact_id);
 
     return {
@@ -545,6 +651,7 @@ export class ZohoDeskServer {
   }
 
   private async handleGetContactTickets(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.getContactTickets(args.contact_id);
 
     return {
@@ -562,6 +669,7 @@ export class ZohoDeskServer {
    * =========================== */
 
   private async handleListDepartments(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.getDepartments();
 
     return {
@@ -575,6 +683,7 @@ export class ZohoDeskServer {
   }
 
   private async handleListAgents(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.getAgents();
 
     return {
@@ -588,6 +697,7 @@ export class ZohoDeskServer {
   }
 
   private async handleGetAgent(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.getAgent(args.agent_id);
 
     return {
@@ -605,6 +715,7 @@ export class ZohoDeskServer {
    * =========================== */
 
   private async handleSearchTickets(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.searchTickets(args.query, {
       limit: args.limit,
     });
@@ -1168,6 +1279,6 @@ export class ZohoDeskServer {
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('Zoho Desk MCP server running on stdio');
+    console.error('Zoho Desk MCP server v1.1.0 running on stdio');
   }
 }

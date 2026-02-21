@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.wbcom.zoho-desk-token-refresh</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/varundubey/.mcp-servers/zoho-desk-mcp-server/refresh-token.sh</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>3000</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/varundubey/.mcp-servers/zoho-desk-mcp-server/automation/token-refresh.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/varundubey/.mcp-servers/zoho-desk-mcp-server/automation/token-refresh-error.log</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>

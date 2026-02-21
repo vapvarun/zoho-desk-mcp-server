@@ -112,8 +112,11 @@ export class ZohoAPI {
       const response = await fetch(url, options);
       const responseData = await response.json().catch(() => ({}));
 
-      // Check for authentication errors
-      if ((response.status === 401 || response.status === 403) && retryCount === 0) {
+      // Check for authentication errors (Zoho returns 200 with errorCode)
+      const isAuthError = (response.status === 401 || response.status === 403) ||
+                          (responseData.errorCode === 'INVALID_OAUTH');
+
+      if (isAuthError && retryCount === 0) {
         // Try to refresh token automatically
         if (this.refreshToken && this.clientId && this.clientSecret) {
           console.error('🔄 Access token expired, refreshing automatically...');

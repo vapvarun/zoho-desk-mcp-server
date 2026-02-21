@@ -1,6 +1,6 @@
 {
   "name": "zoho-desk-mcp-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP server for Zoho Desk Manager - AI-powered support ticket management for Claude AI",
   "type": "module",
   "main": "build/index.js",
