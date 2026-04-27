@@ -386,6 +386,7 @@ export class ZohoDeskServer {
   }
 
   private async handleListOpenTickets(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.getTickets({
       status: 'Open',
       limit: args.limit,
@@ -430,19 +431,58 @@ export class ZohoDeskServer {
 
   private async handleCreateTicket(args: any): Promise<CallToolResult> {
     await this.ensureTokenInitialized();
+
+    // Default to Themes & Plugins if caller didn't specify — Zoho API requires departmentId.
+    const DEFAULT_DEPARTMENT_ID = '233992000000006907';
+
     const response = await this.zohoAPI.createTicket({
       subject: args.subject,
       description: args.description,
+      departmentId: args.department_id || DEFAULT_DEPARTMENT_ID,
       contactId: args.contact_id,
+      contactEmail: args.contact_email,
+      contactName: args.contact_name,
+      channel: args.channel,
       priority: args.priority,
       status: args.status,
+      assigneeId: args.assignee_id,
+      customFields: args.custom_fields,
     });
+
+    const ticketData: any = response.data || {};
+    const ticketId: string | undefined = ticketData.id;
+
+    // Attach tags after creation — Zoho uses a separate endpoint.
+    // Tag names: 3-100 chars, allowed chars: [a-zA-Z0-9_.+\-%\s] (colon NOT allowed).
+    if (ticketId && Array.isArray(args.tags) && args.tags.length > 0) {
+      // Sanitize: Zoho forbids ":" in tag names. Replace with "-" so "source:crisp" → "source-crisp".
+      const sanitized: string[] = [];
+      const renamed: Array<{ from: string; to: string }> = [];
+      for (const raw of args.tags) {
+        const clean = String(raw).replace(/[:]/g, '-').trim();
+        if (clean !== String(raw)) renamed.push({ from: raw, to: clean });
+        if (clean.length >= 3) sanitized.push(clean);
+      }
+      if (renamed.length > 0) ticketData._tag_renamed = renamed;
+
+      try {
+        const tagRes = await this.zohoAPI.associateTicketTags(ticketId, sanitized);
+        const tagErrorCode = (tagRes.data as any)?.errorCode;
+        if (tagRes.code >= 400 || tagErrorCode) {
+          ticketData._tag_warning = `Tag association failed (${tagRes.code}): ${tagErrorCode || 'unknown'} - ${(tagRes.data as any)?.message || JSON.stringify(tagRes.data)}`;
+        } else {
+          ticketData._tags_attached = sanitized;
+        }
+      } catch (tagErr: any) {
+        ticketData._tag_warning = `Tag association threw: ${tagErr?.message || String(tagErr)}`;
+      }
+    }
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(response.data, null, 2),
+          text: JSON.stringify(ticketData, null, 2),
         } as TextContent,
       ],
     };
@@ -457,12 +497,20 @@ export class ZohoDeskServer {
     if (args.department_id) updateData.departmentId = args.department_id;
 
     const response = await this.zohoAPI.updateTicket(args.ticket_id, updateData);
+    const body: any = response.data || {};
+    if (response.code >= 400 || body.errorCode) {
+      body._http_status = response.code;
+      body._zoho_error = body.errorCode;
+      if (body.errorCode === 'URL_NOT_FOUND') {
+        body._hint = 'Likely OAuth scope issue: refresh token may lack Desk.tickets.UPDATE. Regenerate token with Desk.tickets.ALL scope.';
+      }
+    }
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(response.data, null, 2),
+          text: JSON.stringify(body, null, 2),
         } as TextContent,
       ],
     };
@@ -604,13 +652,31 @@ export class ZohoDeskServer {
 
   private async handleAddTicketTags(args: any): Promise<CallToolResult> {
     await this.ensureTokenInitialized();
-    const response = await this.zohoAPI.addTicketTags(args.ticket_id, args.tags);
+    // Sanitize: Zoho forbids ":" in tag names. Replace with "-".
+    const renamed: Array<{ from: string; to: string }> = [];
+    const sanitized: string[] = [];
+    for (const raw of (args.tags || [])) {
+      const clean = String(raw).replace(/[:]/g, '-').trim();
+      if (clean !== String(raw)) renamed.push({ from: raw, to: clean });
+      if (clean.length >= 3) sanitized.push(clean);
+    }
+
+    const response = await this.zohoAPI.addTicketTags(args.ticket_id, sanitized);
+    const body: any = response.data || {};
+    const out: any = Array.isArray(body) || typeof body === 'object' ? { ...body } : { data: body };
+    if (renamed.length > 0) out._tag_renamed = renamed;
+    if (response.code >= 400 || body.errorCode) {
+      out._http_status = response.code;
+      out._zoho_error = body.errorCode;
+    } else {
+      out._tags_attached = sanitized;
+    }
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(response.data, null, 2),
+          text: JSON.stringify(out, null, 2),
         } as TextContent,
       ],
     };
@@ -796,55 +862,47 @@ export class ZohoDeskServer {
    * BULK TICKET OPERATION HANDLERS
    * =========================== */
 
-  private async handleBulkCloseTickets(args: any): Promise<CallToolResult> {
-    const response = await this.zohoAPI.closeTickets(args.ticket_ids);
+  private wrapBulkResponse(response: any, ticketIds: string[]): any {
+    const body: any = response.data || {};
+    const out: any = Array.isArray(body) ? { data: body } : { ...body };
+    if (response.code >= 400 || body.errorCode) {
+      out._http_status = response.code;
+      out._zoho_error = body.errorCode;
+    } else {
+      out._affected_ids = ticketIds;
+    }
+    return out;
+  }
 
+  private async handleBulkCloseTickets(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const response = await this.zohoAPI.closeTickets(args.ticket_ids);
     return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(response.data, null, 2),
-        } as TextContent,
-      ],
+      content: [{ type: 'text', text: JSON.stringify(this.wrapBulkResponse(response, args.ticket_ids), null, 2) } as TextContent],
     };
   }
 
   private async handleMarkTicketsRead(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.markTicketsRead(args.ticket_ids);
-
     return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(response.data, null, 2),
-        } as TextContent,
-      ],
+      content: [{ type: 'text', text: JSON.stringify(this.wrapBulkResponse(response, args.ticket_ids), null, 2) } as TextContent],
     };
   }
 
   private async handleMarkTicketsUnread(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.markTicketsUnread(args.ticket_ids);
-
     return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(response.data, null, 2),
-        } as TextContent,
-      ],
+      content: [{ type: 'text', text: JSON.stringify(this.wrapBulkResponse(response, args.ticket_ids), null, 2) } as TextContent],
     };
   }
 
   private async handleTrashTickets(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
     const response = await this.zohoAPI.trashTickets(args.ticket_ids);
-
     return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(response.data, null, 2),
-        } as TextContent,
-      ],
+      content: [{ type: 'text', text: JSON.stringify(this.wrapBulkResponse(response, args.ticket_ids), null, 2) } as TextContent],
     };
   }
 

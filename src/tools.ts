@@ -120,7 +120,7 @@ export const tools: Tool[] = [
   },
   {
     name: 'zoho_create_ticket',
-    description: 'Create a new support ticket',
+    description: 'Create a new support ticket. Department defaults to Themes & Plugins if not specified. Pass contact_email + contact_name to auto-create a contact when contact_id is unknown (useful for Crisp chat → Zoho sync).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -130,11 +130,27 @@ export const tools: Tool[] = [
         },
         description: {
           type: 'string',
-          description: 'Ticket description/content'
+          description: 'Ticket description/content (HTML supported)'
+        },
+        department_id: {
+          type: 'string',
+          description: 'Department ID. Defaults to Themes & Plugins (233992000000006907) if omitted.'
         },
         contact_id: {
           type: 'string',
-          description: 'Contact ID (customer)'
+          description: 'Existing Zoho contact ID (if known)'
+        },
+        contact_email: {
+          type: 'string',
+          description: 'Customer email — used to auto-create contact when contact_id is missing'
+        },
+        contact_name: {
+          type: 'string',
+          description: 'Customer full name — used to auto-create contact when contact_id is missing'
+        },
+        channel: {
+          type: 'string',
+          description: 'Ticket channel (e.g. Email, Web, Phone, Chat, Forums, Twitter, Facebook)'
         },
         priority: {
           type: 'string',
@@ -144,6 +160,20 @@ export const tools: Tool[] = [
         status: {
           type: 'string',
           description: 'Initial ticket status'
+        },
+        assignee_id: {
+          type: 'string',
+          description: 'Agent ID to assign the ticket to'
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Tag names to attach on creation (e.g. ["source:crisp", "chat"])'
+        },
+        custom_fields: {
+          type: 'object',
+          description: 'Custom field values keyed by API field name (e.g. {"cf_crisp_session_id":"s_abc123"})',
+          additionalProperties: true
         }
       },
       required: ['subject', 'description']

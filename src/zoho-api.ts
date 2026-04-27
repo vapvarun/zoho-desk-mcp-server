@@ -202,12 +202,50 @@ export class ZohoAPI {
     subject: string;
     description: string;
     contactId?: string;
+    contactEmail?: string;
+    contactName?: string;
     departmentId?: string;
+    channel?: string;
     priority?: string;
     status?: string;
     assigneeId?: string;
+    customFields?: Record<string, any>;
   }) {
-    return this.post('/tickets', data);
+    const payload: Record<string, any> = {
+      subject: data.subject,
+      description: data.description,
+    };
+
+    if (data.departmentId) payload.departmentId = data.departmentId;
+    if (data.channel) payload.channel = data.channel;
+    if (data.priority) payload.priority = data.priority;
+    if (data.status) payload.status = data.status;
+    if (data.assigneeId) payload.assigneeId = data.assigneeId;
+    if (data.customFields) payload.customFields = data.customFields;
+
+    // Contact handling: prefer contactId if provided; otherwise auto-create via email+name
+    if (data.contactId) {
+      payload.contactId = data.contactId;
+    } else if (data.contactEmail || data.contactName) {
+      const raw = (data.contactName || '').trim();
+      const parts = raw ? raw.split(/\s+/) : [];
+      const firstName = parts[0] || (data.contactEmail ? data.contactEmail.split('@')[0] : 'Customer');
+      const lastName = parts.slice(1).join(' ') || '-';
+      payload.contact = {
+        firstName,
+        lastName,
+        ...(data.contactEmail ? { email: data.contactEmail } : {}),
+      };
+    }
+
+    return this.post('/tickets', payload);
+  }
+
+  // Zoho Desk: POST /api/v1/tickets/{ticketId}/associateTag, body { tags: ["name1", "name2"] }
+  // Tag names: 3-100 chars, pattern [a-zA-Z0-9_.\-+%\s] (colon ":" is NOT allowed).
+  // Tags must exist in the account allowlist (Setup → Customization → Tags) — otherwise 422 INVALID_DATA.
+  async associateTicketTags(ticketId: string, tagNames: string[]) {
+    return this.post(`/tickets/${ticketId}/associateTag`, { tags: tagNames });
   }
 
   async updateTicket(ticketId: string, data: {
@@ -250,9 +288,71 @@ export class ZohoAPI {
   }
 
   async addTicketReply(ticketId: string, content: string, isPublic = true) {
-    return this.post(`/tickets/${ticketId}/threads`, {
+    // Public replies use Zoho's /sendReply endpoint, which requires channel + from/to.
+    // Internal notes (isPublic=false) use the /comments endpoint instead — the public
+    // reply path here is the only documented way to email the customer back.
+    // Ref: https://desk.zoho.com/DeskAPIDocument#Tickets#Tickets_SendReply
+    if (!isPublic) {
+      return this.post(`/tickets/${ticketId}/comments`, {
+        content,
+        contentType: 'html',
+        isPublic: false,
+      });
+    }
+
+    // Auto-derive from/to from the most recent inbound thread so callers don't have
+    // to pass them. We use the latest "in" thread's fromEmailAddress as the customer
+    // address and its "to" as our outbound from. Falls back to the ticket's email
+    // field if no inbound thread exists yet.
+    const threadsRes = await this.get(`/tickets/${ticketId}/threads`, { limit: '50' });
+    const threads: any[] = (threadsRes.data && threadsRes.data.data) || [];
+    const inbound = threads.find((t) => t.direction === 'in') || threads[0];
+
+    const ticketRes = await this.get(`/tickets/${ticketId}`);
+    const ticket: any = ticketRes.data;
+
+    // Extract bare email out of "Display Name<addr@x>" or "<addr@x>" wrappers.
+    const extractEmail = (s: string | undefined | null): string => {
+      if (!s) return '';
+      const m = s.match(/<([^>]+)>/);
+      return (m ? m[1] : s).trim();
+    };
+
+    let toAddress = '';
+    let fromAddress = '';
+    let channel = 'EMAIL';
+
+    if (inbound) {
+      channel = (inbound.channel || 'EMAIL').toUpperCase();
+      // Latest in-bound: customer is the sender → reply TO them.
+      // For an out-bound or system thread, fall back to ticket.email.
+      if (inbound.direction === 'in') {
+        toAddress = extractEmail(inbound.fromEmailAddress);
+        fromAddress = extractEmail(inbound.to) || ticket.email || '';
+      } else {
+        toAddress = extractEmail(inbound.to);
+        fromAddress = extractEmail(inbound.fromEmailAddress) || ticket.email || '';
+      }
+    }
+
+    if (!toAddress) toAddress = ticket.email || '';
+    if (!fromAddress) fromAddress = ticket.email || '';
+
+    if (!toAddress || !fromAddress) {
+      throw new Error(
+        `Cannot send reply on ticket ${ticketId}: unable to derive from/to email ` +
+        `(threads=${threads.length}, ticket.email=${ticket.email || 'none'}). ` +
+        `Use zoho_add_ticket_comment for an internal note instead.`
+      );
+    }
+
+    return this.post(`/tickets/${ticketId}/sendReply`, {
+      channel,
+      fromEmailAddress: fromAddress,
+      to: toAddress,
       content,
-      isPublicReply: isPublic
+      contentType: 'html',
+      isForward: false,
     });
   }
 
@@ -307,12 +407,15 @@ export class ZohoAPI {
     return this.get(`/tickets/${ticketId}/tags`);
   }
 
-  async addTicketTags(ticketId: string, tags: string[]) {
-    return this.post(`/tickets/${ticketId}/tags`, { tags });
+  // Kept as alias for backward compat — routes through the correct associate endpoint.
+  async addTicketTags(ticketId: string, tagNames: string[]) {
+    return this.associateTicketTags(ticketId, tagNames);
   }
 
-  async removeTicketTag(ticketId: string, tagId: string) {
-    return this.delete(`/tickets/${ticketId}/tags/${tagId}`);
+  // Zoho Desk: POST /api/v1/tickets/{ticketId}/dissociateTag, body { tags: ["name1", ...] }
+  // Mirrors associateTag (same body schema). Source: Zoho OAS v1.0 TicketTag.json.
+  async dissociateTicketTags(ticketId: string, tagNames: string[]) {
+    return this.post(`/tickets/${ticketId}/dissociateTag`, { tags: tagNames });
   }
 
   /* ===========================
@@ -367,7 +470,7 @@ export class ZohoAPI {
     const searchParams: Record<string, string> = { searchStr: query };
     if (params?.limit) searchParams.limit = params.limit.toString();
 
-    return this.get('/search', searchParams);
+    return this.get('/tickets/search', searchParams);
   }
 
   /* ===========================
@@ -418,20 +521,37 @@ export class ZohoAPI {
    * BULK TICKET OPERATIONS
    * =========================== */
 
+  // Bulk close tickets. Zoho Desk: POST /api/v1/closeTickets, body { ids: ["..."] }.
+  // Note the path is root-level (/closeTickets), NOT /tickets/actions/closemany.
+  // Source: Zoho OAS v1.0 Ticket.json (#/components/requestBodies/closeTicketInput).
   async closeTickets(ticketIds: string[]) {
-    return this.post('/tickets/close', { ids: ticketIds });
+    return this.post('/closeTickets', { ids: ticketIds });
   }
 
+  // Mark a single ticket as read. Zoho Desk: POST /api/v1/tickets/{id}/markAsRead (no body).
+  // The API is per-ticket, not bulk — we loop client-side to keep the existing signature.
+  // Source: Zoho OAS v1.0 Ticket.json.
   async markTicketsRead(ticketIds: string[]) {
-    return this.post('/tickets/read', { ids: ticketIds });
+    const results = await Promise.all(
+      ticketIds.map((id) => this.post(`/tickets/${id}/markAsRead`, {}))
+    );
+    return { code: 200, data: results.map((r) => r.data), headers: {} } as ZohoResponse<any>;
   }
 
+  // Mark a single ticket as unread. Zoho Desk: POST /api/v1/tickets/{id}/markAsUnRead (capital R, no body).
+  // Per-ticket; loop client-side. Source: Zoho OAS v1.0 Ticket.json.
   async markTicketsUnread(ticketIds: string[]) {
-    return this.post('/tickets/unread', { ids: ticketIds });
+    const results = await Promise.all(
+      ticketIds.map((id) => this.post(`/tickets/${id}/markAsUnRead`, {}))
+    );
+    return { code: 200, data: results.map((r) => r.data), headers: {} } as ZohoResponse<any>;
   }
 
+  // Bulk move tickets to trash. Zoho Desk: POST /api/v1/tickets/moveToTrash, body { ticketIds: ["..."] }.
+  // Note the body field is `ticketIds`, not `ids` (different from closeTickets).
+  // Source: Zoho OAS v1.0 Ticket.json (#/components/requestBodies/moveRequestsToTrash).
   async trashTickets(ticketIds: string[]) {
-    return this.post('/tickets/trash', { ids: ticketIds });
+    return this.post('/tickets/moveToTrash', { ticketIds });
   }
 
   /* ===========================
