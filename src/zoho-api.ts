@@ -171,6 +171,10 @@ export class ZohoAPI {
     return this.request<T>('PATCH', endpoint, data);
   }
 
+  private async put<T = any>(endpoint: string, data?: any): Promise<ZohoResponse<T>> {
+    return this.request<T>('PUT', endpoint, data);
+  }
+
   private async delete<T = any>(endpoint: string): Promise<ZohoResponse<T>> {
     return this.request<T>('DELETE', endpoint);
   }
@@ -706,10 +710,14 @@ export class ZohoAPI {
     return this.get(`/contacts/${contactId}/tickets`);
   }
 
-  // Find a contact by email. Zoho returns matching contacts with their full details.
-  // Returns the first match or null. Source: Zoho Desk /contacts search params.
+  // Find a contact by email. Zoho's contact search uses wildcard matching — bare
+  // values won't match unless suffixed with `*` (Pipedream's find-contact pattern).
+  // Returns the first match or null. Source: Pipedream zoho_desk find-or-create-contact.
   async findContactByEmail(email: string) {
-    const res = await this.get('/contacts/search', { email });
+    const res = await this.get('/contacts/search', {
+      email: `${email}*`,
+      sortBy: 'relevance',
+    });
     const data = (res.data && (res.data.data || res.data)) || [];
     return Array.isArray(data) && data.length > 0 ? data[0] : null;
   }
@@ -756,9 +764,14 @@ export class ZohoAPI {
    * SEARCH
    * =========================== */
 
-  async searchTickets(query: string, params?: { limit?: number }) {
-    const searchParams: Record<string, string> = { searchStr: query };
+  // Zoho Desk OAS v1.0 Search.json: GET /tickets/search uses query params (not searchStr).
+  // For free-form text search use `_all` with a wildcard suffix (Pipedream pattern).
+  // Field-specific filters (subject, status, priority, etc.) are also supported but the
+  // free-form path is what `searchStr` was trying to be.
+  async searchTickets(query: string, params?: { limit?: number; sortBy?: string }) {
+    const searchParams: Record<string, string> = { _all: `${query}*`, sortBy: 'relevance' };
     if (params?.limit) searchParams.limit = params.limit.toString();
+    if (params?.sortBy) searchParams.sortBy = params.sortBy;
 
     return this.get('/tickets/search', searchParams);
   }
@@ -880,8 +893,16 @@ export class ZohoAPI {
     return this.patch(`/accounts/${accountId}`, data);
   }
 
+  // Zoho Desk OAS v1.0 Account.json has no DELETE on /accounts/{id} — only POST
+  // /accounts/moveToTrash with body { accountIds: [...] }. Earlier code used the
+  // (non-existent) DELETE path and would have failed.
   async deleteAccount(accountId: string) {
-    return this.delete(`/accounts/${accountId}`);
+    return this.post('/accounts/moveToTrash', { accountIds: [accountId] });
+  }
+
+  // Bulk version of the above for callers that already have multiple IDs.
+  async trashAccounts(accountIds: string[]) {
+    return this.post('/accounts/moveToTrash', { accountIds });
   }
 
   async getAccountTickets(accountId: string, params?: { limit?: number; from?: number }) {
@@ -904,13 +925,20 @@ export class ZohoAPI {
    * TIME ENTRIES
    * =========================== */
 
+  // Zoho Desk OAS v1.0 TicketTimeEntry.json uses singular `/timeEntry` (not /timeEntries),
+  // PUT (not PATCH) for updates, and `/timeEntrySummation` (not /timeEntries/summation).
+  // Earlier MCP versions had every one of these wrong — they would 404 or 405 in production.
   async getTicketTimeEntries(ticketId: string, params?: { limit?: number; from?: number; billingType?: string }) {
     const query: Record<string, string> = {};
     if (params?.limit) query.limit = params.limit.toString();
     if (params?.from) query.from = params.from.toString();
-    if (params?.billingType) query.billingType = params.billingType;
+    if (params?.billingType) {
+      // Zoho exposes "/timeEntryByBillingType" for billing-type filtering.
+      query.billingType = params.billingType;
+      return this.get(`/tickets/${ticketId}/timeEntryByBillingType`, query);
+    }
 
-    return this.get(`/tickets/${ticketId}/timeEntries`, query);
+    return this.get(`/tickets/${ticketId}/timeEntry`, query);
   }
 
   async addTicketTimeEntry(ticketId: string, data: {
@@ -919,7 +947,7 @@ export class ZohoAPI {
     description?: string;
     billingType?: 'Billable' | 'Non Billable';
   }) {
-    return this.post(`/tickets/${ticketId}/timeEntries`, data);
+    return this.post(`/tickets/${ticketId}/timeEntry`, data);
   }
 
   async updateTicketTimeEntry(ticketId: string, timeEntryId: string, data: {
@@ -927,15 +955,16 @@ export class ZohoAPI {
     description?: string;
     billingType?: 'Billable' | 'Non Billable';
   }) {
-    return this.patch(`/tickets/${ticketId}/timeEntries/${timeEntryId}`, data);
+    // Zoho uses PUT for time-entry updates (not PATCH like other resources).
+    return this.put(`/tickets/${ticketId}/timeEntry/${timeEntryId}`, data);
   }
 
   async deleteTicketTimeEntry(ticketId: string, timeEntryId: string) {
-    return this.delete(`/tickets/${ticketId}/timeEntries/${timeEntryId}`);
+    return this.delete(`/tickets/${ticketId}/timeEntry/${timeEntryId}`);
   }
 
   async getTicketTimeEntrySummary(ticketId: string) {
-    return this.get(`/tickets/${ticketId}/timeEntries/summation`);
+    return this.get(`/tickets/${ticketId}/timeEntrySummation`);
   }
 
   /* ===========================

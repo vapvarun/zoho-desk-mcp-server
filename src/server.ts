@@ -1652,6 +1652,6 @@ export class ZohoDeskServer {
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('Zoho Desk MCP server v1.2.0 running on stdio');
+    console.error('Zoho Desk MCP server v1.2.1 running on stdio');
   }
 }
