@@ -1036,5 +1036,355 @@ export const tools: Tool[] = [
       },
       required: ['product_id']
     }
+  },
+
+  /* ===========================
+   * TICKET DRAFT REPLIES (stage outbound emails without sending)
+   * =========================== */
+  {
+    name: 'zoho_draft_ticket_reply',
+    description: 'Stage an email reply on a ticket as a draft (no email sent). From/To/channel auto-derived from the latest inbound thread. Plain-text content is auto-formatted as HTML paragraphs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: { type: 'string', description: 'Ticket ID' },
+        content: { type: 'string', description: 'Reply body. HTML or plain text — plain text is auto-wrapped in <p> tags so paragraphs render correctly.' }
+      },
+      required: ['ticket_id', 'content']
+    }
+  },
+  {
+    name: 'zoho_update_draft_reply',
+    description: 'Update the content of an existing draft reply thread.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: { type: 'string', description: 'Ticket ID' },
+        thread_id: { type: 'string', description: 'Draft thread ID returned from zoho_draft_ticket_reply' },
+        content: { type: 'string', description: 'New reply body' }
+      },
+      required: ['ticket_id', 'thread_id', 'content']
+    }
+  },
+
+  /* ===========================
+   * THREAD UTILITIES
+   * =========================== */
+  {
+    name: 'zoho_get_thread_original_content',
+    description: 'Fetch the original (full) email body for a thread, including any inline images and full quoted history.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: { type: 'string' },
+        thread_id: { type: 'string' }
+      },
+      required: ['ticket_id', 'thread_id']
+    }
+  },
+  {
+    name: 'zoho_delete_thread_attachment',
+    description: 'Delete an attachment from a specific thread on a ticket.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: { type: 'string' },
+        thread_id: { type: 'string' },
+        attachment_id: { type: 'string' }
+      },
+      required: ['ticket_id', 'thread_id', 'attachment_id']
+    }
+  },
+
+  /* ===========================
+   * TICKET RESOLUTION
+   * =========================== */
+  {
+    name: 'zoho_get_ticket_resolution',
+    description: 'Get the resolution summary for a ticket (the canonical fix description set when closing).',
+    inputSchema: { type: 'object', properties: { ticket_id: { type: 'string' } }, required: ['ticket_id'] }
+  },
+  {
+    name: 'zoho_update_ticket_resolution',
+    description: 'Set or update the resolution summary on a ticket. Optionally email the contact when set.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: { type: 'string' },
+        content: { type: 'string', description: 'Resolution body (auto-formatted as HTML if plain text)' },
+        is_notify_contact: { type: 'boolean', description: 'Email the contact when resolution is set (default false)' }
+      },
+      required: ['ticket_id', 'content']
+    }
+  },
+  {
+    name: 'zoho_delete_ticket_resolution',
+    description: 'Clear the resolution summary on a ticket.',
+    inputSchema: { type: 'object', properties: { ticket_id: { type: 'string' } }, required: ['ticket_id'] }
+  },
+  {
+    name: 'zoho_get_ticket_resolution_history',
+    description: 'Get the edit history of a ticket resolution.',
+    inputSchema: { type: 'object', properties: { ticket_id: { type: 'string' } }, required: ['ticket_id'] }
+  },
+
+  /* ===========================
+   * TICKET MERGE / SPLIT
+   * =========================== */
+  {
+    name: 'zoho_merge_tickets',
+    description: 'Merge other tickets into a primary ticket. Useful for collapsing duplicate auto-replies into one record.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: { type: 'string', description: 'Primary ticket ID (target)' },
+        merge_ids: { type: 'array', items: { type: 'string' }, description: 'IDs of tickets to merge into the primary' },
+        source: {
+          type: 'object',
+          description: 'Optional: which ticket to inherit fields from (contactId/subject/priority/status)',
+          properties: {
+            contact_id: { type: 'string' },
+            subject: { type: 'string' },
+            priority: { type: 'string' },
+            status: { type: 'string' }
+          }
+        }
+      },
+      required: ['ticket_id', 'merge_ids']
+    }
+  },
+  {
+    name: 'zoho_split_ticket_thread',
+    description: 'Split a thread off a ticket into a new ticket. Useful when one customer email mixes two unrelated issues.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: { type: 'string' },
+        thread_id: { type: 'string' }
+      },
+      required: ['ticket_id', 'thread_id']
+    }
+  },
+
+  /* ===========================
+   * SPAM HANDLING
+   * =========================== */
+  {
+    name: 'zoho_mark_tickets_spam',
+    description: 'Mark one or more tickets as spam. Optionally also mark the contact as spam and apply to their existing tickets.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_ids: { type: 'array', items: { type: 'string' } },
+        contact_spam: { type: 'boolean', description: 'Also mark the originating contact as spam' },
+        handle_existing_tickets: { type: 'boolean', description: 'Apply spam classification to the contact\'s prior tickets' }
+      },
+      required: ['ticket_ids']
+    }
+  },
+  {
+    name: 'zoho_delete_spam_tickets',
+    description: 'Permanently delete spam tickets by ID.',
+    inputSchema: {
+      type: 'object',
+      properties: { ticket_ids: { type: 'array', items: { type: 'string' } } },
+      required: ['ticket_ids']
+    }
+  },
+  {
+    name: 'zoho_empty_spam',
+    description: 'Empty the entire spam folder for a department.',
+    inputSchema: {
+      type: 'object',
+      properties: { department_id: { type: 'string' } },
+      required: ['department_id']
+    }
+  },
+
+  /* ===========================
+   * BULK UPDATE
+   * =========================== */
+  {
+    name: 'zoho_bulk_update_tickets',
+    description: 'Update one field across many tickets at once (e.g. reassign 50 tickets to one agent).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_ids: { type: 'array', items: { type: 'string' } },
+        field_name: { type: 'string', description: 'Field to update (e.g. status, priority, assigneeId, subject)' },
+        field_value: { description: 'New value for that field (string usually)' },
+        is_custom_field: { type: 'boolean', description: 'True if updating a custom field (default false)' }
+      },
+      required: ['ticket_ids', 'field_name', 'field_value']
+    }
+  },
+
+  /* ===========================
+   * TICKET LISTS / VIEWS
+   * =========================== */
+  {
+    name: 'zoho_get_archived_tickets',
+    description: 'List archived tickets.',
+    inputSchema: {
+      type: 'object',
+      properties: { limit: { type: 'number' }, from: { type: 'number' } }
+    }
+  },
+  {
+    name: 'zoho_get_agents_tickets_count',
+    description: 'Get ticket-count-per-agent across the organization (for workload visibility).',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'zoho_get_associated_tickets',
+    description: 'List tickets that are associated with another via merge/parent/child relationship.',
+    inputSchema: {
+      type: 'object',
+      properties: { limit: { type: 'number' }, from: { type: 'number' } }
+    }
+  },
+  {
+    name: 'zoho_get_ticket_queue_view_count',
+    description: 'Get queue-view counts (tickets per saved view).',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'zoho_get_tickets_by_product',
+    description: 'List tickets filed against a specific product.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        product_id: { type: 'string' },
+        limit: { type: 'number' },
+        from: { type: 'number' }
+      },
+      required: ['product_id']
+    }
+  },
+
+  /* ===========================
+   * COMMENT GET / EDIT / DELETE
+   * =========================== */
+  {
+    name: 'zoho_get_ticket_comment',
+    description: 'Get a single ticket comment by ID.',
+    inputSchema: {
+      type: 'object',
+      properties: { ticket_id: { type: 'string' }, comment_id: { type: 'string' } },
+      required: ['ticket_id', 'comment_id']
+    }
+  },
+  {
+    name: 'zoho_update_ticket_comment',
+    description: 'Edit an existing ticket comment\'s content. Plain text is auto-formatted as HTML.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: { type: 'string' },
+        comment_id: { type: 'string' },
+        content: { type: 'string' }
+      },
+      required: ['ticket_id', 'comment_id', 'content']
+    }
+  },
+  {
+    name: 'zoho_delete_ticket_comment',
+    description: 'Delete a ticket comment by ID.',
+    inputSchema: {
+      type: 'object',
+      properties: { ticket_id: { type: 'string' }, comment_id: { type: 'string' } },
+      required: ['ticket_id', 'comment_id']
+    }
+  },
+  {
+    name: 'zoho_get_ticket_comment_history',
+    description: 'Get the edit history of a ticket comment.',
+    inputSchema: {
+      type: 'object',
+      properties: { ticket_id: { type: 'string' }, comment_id: { type: 'string' } },
+      required: ['ticket_id', 'comment_id']
+    }
+  },
+
+  /* ===========================
+   * TAG OPERATIONS (account-level)
+   * =========================== */
+  {
+    name: 'zoho_list_recent_tags',
+    description: 'List recently-used ticket tags across the org.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'zoho_update_recent_tag',
+    description: 'Mark a tag as recently used (bumps it in the recent-tags list).',
+    inputSchema: {
+      type: 'object',
+      properties: { tag_id: { type: 'string' } },
+      required: ['tag_id']
+    }
+  },
+  {
+    name: 'zoho_list_all_tags',
+    description: 'List all ticket tags in the account (full catalog).',
+    inputSchema: {
+      type: 'object',
+      properties: { limit: { type: 'number' }, from: { type: 'number' } }
+    }
+  },
+  {
+    name: 'zoho_search_tags',
+    description: 'Search ticket tags by name.',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string' }, limit: { type: 'number' } },
+      required: ['query']
+    }
+  },
+  {
+    name: 'zoho_list_tickets_by_tag',
+    description: 'List tickets that have a given tag attached.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tag_id: { type: 'string' },
+        limit: { type: 'number' },
+        from: { type: 'number' }
+      },
+      required: ['tag_id']
+    }
+  },
+  {
+    name: 'zoho_replace_tag',
+    description: 'Replace one tag with another across every ticket that uses it (bulk rename/merge).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        current_tag_id: { type: 'string', description: 'Tag to be replaced' },
+        replacing_tag_id: { type: 'string', description: 'Tag that takes its place' }
+      },
+      required: ['current_tag_id', 'replacing_tag_id']
+    }
+  },
+
+  /* ===========================
+   * CONTACT LOOKUP / CUSTOMER HISTORY
+   * =========================== */
+  {
+    name: 'zoho_find_contact_by_email',
+    description: 'Find a Zoho contact by their email address. Returns the first match or null.',
+    inputSchema: {
+      type: 'object',
+      properties: { email: { type: 'string' } },
+      required: ['email']
+    }
+  },
+  {
+    name: 'zoho_get_customer_history_by_email',
+    description: 'Given a customer email, returns their contact record AND every ticket they have ever opened. Use this before replying to a returning customer so you have prior interaction context. Returns null if no contact found.',
+    inputSchema: {
+      type: 'object',
+      properties: { email: { type: 'string' } },
+      required: ['email']
+    }
   }
 ];

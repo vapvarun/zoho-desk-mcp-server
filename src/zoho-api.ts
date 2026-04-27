@@ -175,6 +175,31 @@ export class ZohoAPI {
     return this.request<T>('DELETE', endpoint);
   }
 
+  /**
+   * Normalize text content for Zoho's HTML renderer so paragraph and line
+   * breaks survive the round-trip. Zoho's email renderer collapses raw \n
+   * into a single line — that's the "no formatting, all line together"
+   * symptom. If the caller already passed HTML (detected by any tag), we
+   * trust them and pass through unchanged. Otherwise we wrap each
+   * blank-line-separated block in <p>…</p> and convert intra-paragraph
+   * single \n into <br>.
+   */
+  private formatHtmlContent(content: string): string {
+    if (!content) return '';
+    // Already HTML? (any tag like <p>, <br>, <div>, <a>, <strong>, etc.)
+    if (/<[a-z][\s\S]*?>/i.test(content)) return content;
+    const escapeHtml = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const paragraphs = content
+      .replace(/\r\n/g, '\n')
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+    return paragraphs
+      .map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+      .join('\n');
+  }
+
   /* ===========================
    * TICKETS
    * =========================== */
@@ -350,10 +375,200 @@ export class ZohoAPI {
       channel,
       fromEmailAddress: fromAddress,
       to: toAddress,
-      content,
+      content: this.formatHtmlContent(content),
       contentType: 'html',
       isForward: false,
     });
+  }
+
+  /* ===========================
+   * TICKET DRAFT REPLY
+   * Lets the agent stage a reply without sending it. Same body shape as sendReply.
+   * Source: Zoho OAS v1.0 Thread.json (POST /tickets/{id}/draftReply, PATCH /draftReply/{threadId}).
+   * =========================== */
+
+  async draftTicketReply(ticketId: string, content: string) {
+    // Reuse the same auto-derivation logic as sendReply by inlining it: pull
+    // latest inbound thread + ticket, derive from/to/channel.
+    const threadsRes = await this.get(`/tickets/${ticketId}/threads`, { limit: '50' });
+    const threads: any[] = (threadsRes.data && threadsRes.data.data) || [];
+    const inbound = threads.find((t) => t.direction === 'in') || threads[0];
+    const ticketRes = await this.get(`/tickets/${ticketId}`);
+    const ticket: any = ticketRes.data;
+
+    const extractEmail = (s: string | undefined | null): string => {
+      if (!s) return '';
+      const m = s.match(/<([^>]+)>/);
+      return (m ? m[1] : s).trim();
+    };
+
+    let toAddress = '', fromAddress = '', channel = 'EMAIL';
+    if (inbound) {
+      channel = (inbound.channel || 'EMAIL').toUpperCase();
+      if (inbound.direction === 'in') {
+        toAddress = extractEmail(inbound.fromEmailAddress);
+        fromAddress = extractEmail(inbound.to) || ticket.email || '';
+      } else {
+        toAddress = extractEmail(inbound.to);
+        fromAddress = extractEmail(inbound.fromEmailAddress) || ticket.email || '';
+      }
+    }
+    if (!toAddress) toAddress = ticket.email || '';
+    if (!fromAddress) fromAddress = ticket.email || '';
+
+    if (!toAddress || !fromAddress) {
+      throw new Error(
+        `Cannot draft reply on ticket ${ticketId}: unable to derive from/to email.`
+      );
+    }
+
+    return this.post(`/tickets/${ticketId}/draftReply`, {
+      channel,
+      fromEmailAddress: fromAddress,
+      to: toAddress,
+      content: this.formatHtmlContent(content),
+      contentType: 'html',
+      isForward: false,
+    });
+  }
+
+  async updateDraftReply(ticketId: string, threadId: string, content: string) {
+    // PATCH only takes the fields you want to update; content is the typical edit.
+    return this.patch(`/tickets/${ticketId}/draftReply/${threadId}`, {
+      channel: 'EMAIL',
+      content: this.formatHtmlContent(content),
+      contentType: 'html',
+    });
+  }
+
+  /* ===========================
+   * THREAD ORIGINAL CONTENT (full email body)
+   * Source: Zoho OAS v1.0 Thread.json.
+   * =========================== */
+
+  async getThreadOriginalContent(ticketId: string, threadId: string) {
+    return this.get(`/tickets/${ticketId}/threads/${threadId}/originalContent`);
+  }
+
+  async deleteThreadAttachment(ticketId: string, threadId: string, attachmentId: string) {
+    return this.delete(`/tickets/${ticketId}/threads/${threadId}/attachments/${attachmentId}`);
+  }
+
+  /* ===========================
+   * TICKET RESOLUTION
+   * The "resolution" is the canonical fix-summary stored on a closed ticket.
+   * Source: Zoho OAS v1.0 Ticket.json (GET/PATCH/DELETE /tickets/{id}/resolution).
+   * =========================== */
+
+  async getTicketResolution(ticketId: string) {
+    return this.get(`/tickets/${ticketId}/resolution`);
+  }
+
+  async updateTicketResolution(ticketId: string, content: string, isNotifyContact = false) {
+    return this.patch(`/tickets/${ticketId}/resolution`, { content, isNotifyContact });
+  }
+
+  async deleteTicketResolution(ticketId: string) {
+    return this.delete(`/tickets/${ticketId}/resolution`);
+  }
+
+  async getTicketResolutionHistory(ticketId: string) {
+    return this.get(`/tickets/${ticketId}/resolutionHistory`);
+  }
+
+  /* ===========================
+   * TICKET MERGE / SPLIT
+   * Source: Zoho OAS v1.0 Ticket.json.
+   * =========================== */
+
+  async mergeTickets(ticketId: string, mergeIds: string[], source?: {
+    contactId?: string; subject?: string; priority?: string; status?: string;
+  }) {
+    const body: any = { ids: mergeIds };
+    if (source) body.source = source;
+    return this.post(`/tickets/${ticketId}/merge`, body);
+  }
+
+  async splitTicketThread(ticketId: string, threadId: string) {
+    return this.post(`/tickets/${ticketId}/threads/${threadId}/split`, {});
+  }
+
+  /* ===========================
+   * TICKET SPAM HANDLING
+   * Source: Zoho OAS v1.0 Ticket.json.
+   * =========================== */
+
+  // Mark tickets as spam. Zoho OAS body example:
+  // { ids:[...], isSpam:"true", contactSpam:"true", handleExistingTickets:"true" }
+  // Note Zoho uses string booleans here (legacy API quirk).
+  async markTicketsSpam(ticketIds: string[], options?: {
+    contactSpam?: boolean; handleExistingTickets?: boolean;
+  }) {
+    const body: any = { ids: ticketIds, isSpam: 'true' };
+    if (options?.contactSpam !== undefined) body.contactSpam = String(options.contactSpam);
+    if (options?.handleExistingTickets !== undefined) body.handleExistingTickets = String(options.handleExistingTickets);
+    return this.post('/tickets/markSpam', body);
+  }
+
+  // Permanently delete spam tickets. Body: { ticketIds: [...] }.
+  async deleteSpamTickets(ticketIds: string[]) {
+    return this.post('/tickets/deleteSpam', { ticketIds });
+  }
+
+  // Empty all spam in a department. Body: { departmentId }.
+  async emptySpam(departmentId: string) {
+    return this.post('/tickets/emptySpam', { departmentId });
+  }
+
+  /* ===========================
+   * TICKET BULK UPDATE
+   * Update one field across many tickets. Body:
+   * { fieldName, fieldValue, ids:[...], isCustomField? }
+   * =========================== */
+
+  async bulkUpdateTickets(
+    ticketIds: string[],
+    fieldName: string,
+    fieldValue: any,
+    isCustomField = false
+  ) {
+    return this.post('/tickets/updateMany', {
+      fieldName, fieldValue, ids: ticketIds, isCustomField,
+    });
+  }
+
+  /* ===========================
+   * TICKET LISTS / VIEWS
+   * Source: Zoho OAS v1.0 Ticket.json.
+   * =========================== */
+
+  async getArchivedTickets(params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+    return this.get('/tickets/archivedTickets', query);
+  }
+
+  async getAgentsTicketsCount() {
+    return this.get('/agentsTicketsCount');
+  }
+
+  async getAssociatedTickets(params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+    return this.get('/associatedTickets', query);
+  }
+
+  async getTicketQueueViewCount() {
+    return this.get('/ticketQueueView/count');
+  }
+
+  async getTicketsByProduct(productId: string, params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+    return this.get(`/products/${productId}/tickets`, query);
   }
 
   /* ===========================
@@ -392,11 +607,30 @@ export class ZohoAPI {
   }
 
   async addTicketComment(ticketId: string, content: string, isPublic = false, contentType = 'html') {
+    // Auto-format plain text into paragraphs for the html renderer; pass HTML through.
+    const finalContent = contentType === 'html' ? this.formatHtmlContent(content) : content;
     return this.post(`/tickets/${ticketId}/comments`, {
-      content,
+      content: finalContent,
       isPublic,
       contentType
     });
+  }
+
+  // Source: Zoho OAS v1.0 TicketComment.json (per-comment GET/PATCH/DELETE/history).
+  async getTicketComment(ticketId: string, commentId: string) {
+    return this.get(`/tickets/${ticketId}/comments/${commentId}`);
+  }
+
+  async updateTicketComment(ticketId: string, commentId: string, content: string) {
+    return this.patch(`/tickets/${ticketId}/comments/${commentId}`, { content });
+  }
+
+  async deleteTicketComment(ticketId: string, commentId: string) {
+    return this.delete(`/tickets/${ticketId}/comments/${commentId}`);
+  }
+
+  async getTicketCommentHistory(ticketId: string, commentId: string) {
+    return this.get(`/tickets/${ticketId}/comments/${commentId}/history`);
   }
 
   /* ===========================
@@ -418,6 +652,40 @@ export class ZohoAPI {
     return this.post(`/tickets/${ticketId}/dissociateTag`, { tags: tagNames });
   }
 
+  // Source: Zoho OAS v1.0 TicketTag.json (recent + global tag operations).
+  async listRecentTicketTags() {
+    return this.get('/recentTicketTags');
+  }
+
+  async updateRecentTicketTag(tagId: string) {
+    return this.post(`/recentTicketTags/${tagId}`, {});
+  }
+
+  async listAllTicketTags(params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+    return this.get('/ticketTags', query);
+  }
+
+  async searchTags(query: string, params?: { limit?: number }) {
+    const q: Record<string, string> = { searchStr: query };
+    if (params?.limit) q.limit = params.limit.toString();
+    return this.get('/tags/search', q);
+  }
+
+  async listTicketsByTag(tagId: string, params?: { limit?: number; from?: number }) {
+    const query: Record<string, string> = {};
+    if (params?.limit) query.limit = params.limit.toString();
+    if (params?.from) query.from = params.from.toString();
+    return this.get(`/tags/${tagId}/tickets`, query);
+  }
+
+  // Replace one tag with another across the account. Body: { id: "<replacing tag id>" }.
+  async replaceTag(currentTagId: string, replacingTagId: string) {
+    return this.patch(`/tags/${currentTagId}/replace`, { id: replacingTagId });
+  }
+
   /* ===========================
    * CONTACTS
    * =========================== */
@@ -436,6 +704,28 @@ export class ZohoAPI {
 
   async getContactTickets(contactId: string) {
     return this.get(`/contacts/${contactId}/tickets`);
+  }
+
+  // Find a contact by email. Zoho returns matching contacts with their full details.
+  // Returns the first match or null. Source: Zoho Desk /contacts search params.
+  async findContactByEmail(email: string) {
+    const res = await this.get('/contacts/search', { email });
+    const data = (res.data && (res.data.data || res.data)) || [];
+    return Array.isArray(data) && data.length > 0 ? data[0] : null;
+  }
+
+  // Convenience: given a customer email, find the contact and list every ticket
+  // they've ever opened. Useful before replying to a returning customer so the
+  // agent can see prior interactions. Returns { contact, tickets } or null if
+  // no contact found.
+  async getCustomerHistoryByEmail(email: string) {
+    const contact = await this.findContactByEmail(email);
+    if (!contact || !contact.id) return null;
+    const ticketsRes = await this.get(`/contacts/${contact.id}/tickets`);
+    return {
+      contact,
+      tickets: (ticketsRes.data && (ticketsRes.data.data || ticketsRes.data)) || [],
+    };
   }
 
   /* ===========================

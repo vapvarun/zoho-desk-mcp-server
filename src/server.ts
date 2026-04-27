@@ -309,6 +309,104 @@ export class ZohoDeskServer {
           case 'zoho_get_product':
             return await this.handleGetProduct(toolArgs);
 
+          /* ===========================
+           * DRAFT REPLIES + THREAD UTILITIES
+           * =========================== */
+          case 'zoho_draft_ticket_reply':
+            return await this.handleDraftTicketReply(toolArgs);
+          case 'zoho_update_draft_reply':
+            return await this.handleUpdateDraftReply(toolArgs);
+          case 'zoho_get_thread_original_content':
+            return await this.handleGetThreadOriginalContent(toolArgs);
+          case 'zoho_delete_thread_attachment':
+            return await this.handleDeleteThreadAttachment(toolArgs);
+
+          /* ===========================
+           * RESOLUTION
+           * =========================== */
+          case 'zoho_get_ticket_resolution':
+            return await this.handleGetTicketResolution(toolArgs);
+          case 'zoho_update_ticket_resolution':
+            return await this.handleUpdateTicketResolution(toolArgs);
+          case 'zoho_delete_ticket_resolution':
+            return await this.handleDeleteTicketResolution(toolArgs);
+          case 'zoho_get_ticket_resolution_history':
+            return await this.handleGetTicketResolutionHistory(toolArgs);
+
+          /* ===========================
+           * MERGE / SPLIT
+           * =========================== */
+          case 'zoho_merge_tickets':
+            return await this.handleMergeTickets(toolArgs);
+          case 'zoho_split_ticket_thread':
+            return await this.handleSplitTicketThread(toolArgs);
+
+          /* ===========================
+           * SPAM
+           * =========================== */
+          case 'zoho_mark_tickets_spam':
+            return await this.handleMarkTicketsSpam(toolArgs);
+          case 'zoho_delete_spam_tickets':
+            return await this.handleDeleteSpamTickets(toolArgs);
+          case 'zoho_empty_spam':
+            return await this.handleEmptySpam(toolArgs);
+
+          /* ===========================
+           * BULK UPDATE
+           * =========================== */
+          case 'zoho_bulk_update_tickets':
+            return await this.handleBulkUpdateTickets(toolArgs);
+
+          /* ===========================
+           * TICKET LISTS / VIEWS
+           * =========================== */
+          case 'zoho_get_archived_tickets':
+            return await this.handleGetArchivedTickets(toolArgs);
+          case 'zoho_get_agents_tickets_count':
+            return await this.handleGetAgentsTicketsCount(toolArgs);
+          case 'zoho_get_associated_tickets':
+            return await this.handleGetAssociatedTickets(toolArgs);
+          case 'zoho_get_ticket_queue_view_count':
+            return await this.handleGetTicketQueueViewCount(toolArgs);
+          case 'zoho_get_tickets_by_product':
+            return await this.handleGetTicketsByProduct(toolArgs);
+
+          /* ===========================
+           * COMMENT GET/EDIT/DELETE
+           * =========================== */
+          case 'zoho_get_ticket_comment':
+            return await this.handleGetTicketComment(toolArgs);
+          case 'zoho_update_ticket_comment':
+            return await this.handleUpdateTicketComment(toolArgs);
+          case 'zoho_delete_ticket_comment':
+            return await this.handleDeleteTicketComment(toolArgs);
+          case 'zoho_get_ticket_comment_history':
+            return await this.handleGetTicketCommentHistory(toolArgs);
+
+          /* ===========================
+           * TAG OPERATIONS (account-level)
+           * =========================== */
+          case 'zoho_list_recent_tags':
+            return await this.handleListRecentTags(toolArgs);
+          case 'zoho_update_recent_tag':
+            return await this.handleUpdateRecentTag(toolArgs);
+          case 'zoho_list_all_tags':
+            return await this.handleListAllTags(toolArgs);
+          case 'zoho_search_tags':
+            return await this.handleSearchTags(toolArgs);
+          case 'zoho_list_tickets_by_tag':
+            return await this.handleListTicketsByTag(toolArgs);
+          case 'zoho_replace_tag':
+            return await this.handleReplaceTag(toolArgs);
+
+          /* ===========================
+           * CONTACT LOOKUP / CUSTOMER HISTORY
+           * =========================== */
+          case 'zoho_find_contact_by_email':
+            return await this.handleFindContactByEmail(toolArgs);
+          case 'zoho_get_customer_history_by_email':
+            return await this.handleGetCustomerHistoryByEmail(toolArgs);
+
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -1331,12 +1429,229 @@ export class ZohoDeskServer {
   }
 
   /* ===========================
+   * NEW HANDLERS (audit batch — Zoho OAS coverage gaps)
+   * Each delegates to the matching ZohoAPI method; ensureTokenInitialized()
+   * is called before any zohoAPI access (the helper is idempotent).
+   * =========================== */
+
+  private toResult(data: any): CallToolResult {
+    return {
+      content: [{ type: 'text', text: JSON.stringify(data, null, 2) } as TextContent],
+    };
+  }
+
+  private async handleDraftTicketReply(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.draftTicketReply(args.ticket_id, args.content);
+    return this.toResult(res.data);
+  }
+
+  private async handleUpdateDraftReply(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.updateDraftReply(args.ticket_id, args.thread_id, args.content);
+    return this.toResult(res.data);
+  }
+
+  private async handleGetThreadOriginalContent(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.getThreadOriginalContent(args.ticket_id, args.thread_id);
+    return this.toResult(res.data);
+  }
+
+  private async handleDeleteThreadAttachment(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.deleteThreadAttachment(args.ticket_id, args.thread_id, args.attachment_id);
+    return this.toResult(res.data || { deleted: true });
+  }
+
+  private async handleGetTicketResolution(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.getTicketResolution(args.ticket_id);
+    return this.toResult(res.data);
+  }
+
+  private async handleUpdateTicketResolution(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.updateTicketResolution(
+      args.ticket_id,
+      args.content,
+      args.is_notify_contact === true
+    );
+    return this.toResult(res.data);
+  }
+
+  private async handleDeleteTicketResolution(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.deleteTicketResolution(args.ticket_id);
+    return this.toResult(res.data || { deleted: true });
+  }
+
+  private async handleGetTicketResolutionHistory(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.getTicketResolutionHistory(args.ticket_id);
+    return this.toResult(res.data);
+  }
+
+  private async handleMergeTickets(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    // Map snake_case args to the camelCase the API expects.
+    const source = args.source ? {
+      contactId: args.source.contact_id,
+      subject: args.source.subject,
+      priority: args.source.priority,
+      status: args.source.status,
+    } : undefined;
+    const res = await this.zohoAPI.mergeTickets(args.ticket_id, args.merge_ids, source);
+    return this.toResult(res.data);
+  }
+
+  private async handleSplitTicketThread(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.splitTicketThread(args.ticket_id, args.thread_id);
+    return this.toResult(res.data);
+  }
+
+  private async handleMarkTicketsSpam(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.markTicketsSpam(args.ticket_ids, {
+      contactSpam: args.contact_spam,
+      handleExistingTickets: args.handle_existing_tickets,
+    });
+    return this.toResult(res.data);
+  }
+
+  private async handleDeleteSpamTickets(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.deleteSpamTickets(args.ticket_ids);
+    return this.toResult(res.data);
+  }
+
+  private async handleEmptySpam(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.emptySpam(args.department_id);
+    return this.toResult(res.data);
+  }
+
+  private async handleBulkUpdateTickets(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.bulkUpdateTickets(
+      args.ticket_ids,
+      args.field_name,
+      args.field_value,
+      args.is_custom_field === true
+    );
+    return this.toResult(res.data);
+  }
+
+  private async handleGetArchivedTickets(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.getArchivedTickets({ limit: args.limit, from: args.from });
+    return this.toResult(res.data);
+  }
+
+  private async handleGetAgentsTicketsCount(_args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.getAgentsTicketsCount();
+    return this.toResult(res.data);
+  }
+
+  private async handleGetAssociatedTickets(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.getAssociatedTickets({ limit: args.limit, from: args.from });
+    return this.toResult(res.data);
+  }
+
+  private async handleGetTicketQueueViewCount(_args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.getTicketQueueViewCount();
+    return this.toResult(res.data);
+  }
+
+  private async handleGetTicketsByProduct(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.getTicketsByProduct(args.product_id, { limit: args.limit, from: args.from });
+    return this.toResult(res.data);
+  }
+
+  private async handleGetTicketComment(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.getTicketComment(args.ticket_id, args.comment_id);
+    return this.toResult(res.data);
+  }
+
+  private async handleUpdateTicketComment(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.updateTicketComment(args.ticket_id, args.comment_id, args.content);
+    return this.toResult(res.data);
+  }
+
+  private async handleDeleteTicketComment(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.deleteTicketComment(args.ticket_id, args.comment_id);
+    return this.toResult(res.data || { deleted: true });
+  }
+
+  private async handleGetTicketCommentHistory(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.getTicketCommentHistory(args.ticket_id, args.comment_id);
+    return this.toResult(res.data);
+  }
+
+  private async handleListRecentTags(_args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.listRecentTicketTags();
+    return this.toResult(res.data);
+  }
+
+  private async handleUpdateRecentTag(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.updateRecentTicketTag(args.tag_id);
+    return this.toResult(res.data);
+  }
+
+  private async handleListAllTags(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.listAllTicketTags({ limit: args.limit, from: args.from });
+    return this.toResult(res.data);
+  }
+
+  private async handleSearchTags(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.searchTags(args.query, { limit: args.limit });
+    return this.toResult(res.data);
+  }
+
+  private async handleListTicketsByTag(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.listTicketsByTag(args.tag_id, { limit: args.limit, from: args.from });
+    return this.toResult(res.data);
+  }
+
+  private async handleReplaceTag(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.replaceTag(args.current_tag_id, args.replacing_tag_id);
+    return this.toResult(res.data);
+  }
+
+  private async handleFindContactByEmail(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const contact = await this.zohoAPI.findContactByEmail(args.email);
+    return this.toResult(contact);
+  }
+
+  private async handleGetCustomerHistoryByEmail(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const history = await this.zohoAPI.getCustomerHistoryByEmail(args.email);
+    return this.toResult(history);
+  }
+
+  /* ===========================
    * SERVER LIFECYCLE
    * =========================== */
 
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('Zoho Desk MCP server v1.1.0 running on stdio');
+    console.error('Zoho Desk MCP server v1.2.0 running on stdio');
   }
 }
