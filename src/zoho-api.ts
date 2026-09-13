@@ -31,6 +31,7 @@ export class ZohoAPI {
   private refreshToken?: string;
   private clientId?: string;
   private clientSecret?: string;
+  private replyFromAddress?: string;
   private onTokenRefresh?: (newToken: string) => void;
 
   constructor(
@@ -40,6 +41,7 @@ export class ZohoAPI {
       refreshToken?: string;
       clientId?: string;
       clientSecret?: string;
+      replyFromAddress?: string;
       onTokenRefresh?: (newToken: string) => void;
     }
   ) {
@@ -48,6 +50,7 @@ export class ZohoAPI {
     this.refreshToken = options?.refreshToken;
     this.clientId = options?.clientId;
     this.clientSecret = options?.clientSecret;
+    this.replyFromAddress = options?.replyFromAddress;
     this.onTokenRefresh = options?.onTokenRefresh;
   }
 
@@ -365,6 +368,13 @@ export class ZohoAPI {
     }
 
     if (!toAddress) toAddress = ticket.email || '';
+
+    // The from-address MUST be a registered Zoho Desk outbound email channel.
+    // Deriving it from the inbound thread's "to" yields the inbound forwarding
+    // address (support@wbcomdesigns.com), which Zoho rejects with
+    // INVALID_DATA /fromEmailAddress. The configured replyFromAddress is the
+    // registered channel, so it always wins; derivation is only a fallback.
+    if (this.replyFromAddress) fromAddress = this.replyFromAddress;
     if (!fromAddress) fromAddress = ticket.email || '';
 
     if (!toAddress || !fromAddress) {
@@ -418,6 +428,8 @@ export class ZohoAPI {
       }
     }
     if (!toAddress) toAddress = ticket.email || '';
+    // Same rule as sendReply: the configured registered channel always wins.
+    if (this.replyFromAddress) fromAddress = this.replyFromAddress;
     if (!fromAddress) fromAddress = ticket.email || '';
 
     if (!toAddress || !fromAddress) {

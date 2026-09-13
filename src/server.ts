@@ -81,6 +81,7 @@ export class ZohoDeskServer {
         refreshToken: this.config.refreshToken,
         clientId: this.config.clientId,
         clientSecret: this.config.clientSecret,
+        replyFromAddress: this.config.replyFromAddress,
         onTokenRefresh: (newToken: string) => {
           this.config.accessToken = newToken;
           console.error('✅ Token auto-refreshed during API call');
@@ -96,6 +97,7 @@ export class ZohoDeskServer {
         refreshToken: this.config.refreshToken,
         clientId: this.config.clientId,
         clientSecret: this.config.clientSecret,
+        replyFromAddress: this.config.replyFromAddress,
         onTokenRefresh: (newToken: string) => {
           this.config.accessToken = newToken;
           console.error('✅ Token auto-refreshed during API call');

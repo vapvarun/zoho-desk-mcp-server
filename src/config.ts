@@ -21,6 +21,8 @@ export interface ZohoConfig {
   clientId?: string;
   clientSecret?: string;
   refreshToken?: string;
+  /** Registered Zoho Desk outbound email channel used as the `from` on replies. */
+  replyFromAddress?: string;
 }
 
 export function loadConfig(): ZohoConfig {
