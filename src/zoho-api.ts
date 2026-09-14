@@ -319,6 +319,51 @@ export class ZohoAPI {
     return this.get(`/tickets/${ticketId}/latestThread`);
   }
 
+  /**
+   * Derive channel + from/to for an outbound reply from the ticket's latest inbound
+   * thread. Shared by sendReply, draftTicketReply and updateDraftReply so all three
+   * route identically. The from-address MUST be a registered Zoho Desk outbound email
+   * channel: deriving it from the inbound thread's "to" yields the inbound forwarding
+   * address, which Zoho rejects with INVALID_DATA /fromEmailAddress, so the configured
+   * replyFromAddress always wins; derivation is only a fallback.
+   */
+  private async deriveReplyRouting(
+    ticketId: string
+  ): Promise<{ channel: string; fromAddress: string; toAddress: string }> {
+    const threadsRes = await this.get(`/tickets/${ticketId}/threads`, { limit: '50' });
+    const threads: any[] = (threadsRes.data && threadsRes.data.data) || [];
+    const inbound = threads.find((t) => t.direction === 'in') || threads[0];
+    const ticketRes = await this.get(`/tickets/${ticketId}`);
+    const ticket: any = ticketRes.data;
+
+    const extractEmail = (s: string | undefined | null): string => {
+      if (!s) return '';
+      const m = s.match(/<([^>]+)>/);
+      return (m ? m[1] : s).trim();
+    };
+
+    let toAddress = '';
+    let fromAddress = '';
+    let channel = 'EMAIL';
+
+    if (inbound) {
+      channel = (inbound.channel || 'EMAIL').toUpperCase();
+      if (inbound.direction === 'in') {
+        toAddress = extractEmail(inbound.fromEmailAddress);
+        fromAddress = extractEmail(inbound.to) || ticket.email || '';
+      } else {
+        toAddress = extractEmail(inbound.to);
+        fromAddress = extractEmail(inbound.fromEmailAddress) || ticket.email || '';
+      }
+    }
+
+    if (!toAddress) toAddress = ticket.email || '';
+    if (this.replyFromAddress) fromAddress = this.replyFromAddress;
+    if (!fromAddress) fromAddress = ticket.email || '';
+
+    return { channel, fromAddress, toAddress };
+  }
+
   async addTicketReply(ticketId: string, content: string, isPublic = true) {
     // Public replies use Zoho's /sendReply endpoint, which requires channel + from/to.
     // Internal notes (isPublic=false) use the /comments endpoint instead — the public
@@ -332,55 +377,13 @@ export class ZohoAPI {
       });
     }
 
-    // Auto-derive from/to from the most recent inbound thread so callers don't have
-    // to pass them. We use the latest "in" thread's fromEmailAddress as the customer
-    // address and its "to" as our outbound from. Falls back to the ticket's email
-    // field if no inbound thread exists yet.
-    const threadsRes = await this.get(`/tickets/${ticketId}/threads`, { limit: '50' });
-    const threads: any[] = (threadsRes.data && threadsRes.data.data) || [];
-    const inbound = threads.find((t) => t.direction === 'in') || threads[0];
-
-    const ticketRes = await this.get(`/tickets/${ticketId}`);
-    const ticket: any = ticketRes.data;
-
-    // Extract bare email out of "Display Name<addr@x>" or "<addr@x>" wrappers.
-    const extractEmail = (s: string | undefined | null): string => {
-      if (!s) return '';
-      const m = s.match(/<([^>]+)>/);
-      return (m ? m[1] : s).trim();
-    };
-
-    let toAddress = '';
-    let fromAddress = '';
-    let channel = 'EMAIL';
-
-    if (inbound) {
-      channel = (inbound.channel || 'EMAIL').toUpperCase();
-      // Latest in-bound: customer is the sender → reply TO them.
-      // For an out-bound or system thread, fall back to ticket.email.
-      if (inbound.direction === 'in') {
-        toAddress = extractEmail(inbound.fromEmailAddress);
-        fromAddress = extractEmail(inbound.to) || ticket.email || '';
-      } else {
-        toAddress = extractEmail(inbound.to);
-        fromAddress = extractEmail(inbound.fromEmailAddress) || ticket.email || '';
-      }
-    }
-
-    if (!toAddress) toAddress = ticket.email || '';
-
-    // The from-address MUST be a registered Zoho Desk outbound email channel.
-    // Deriving it from the inbound thread's "to" yields the inbound forwarding
-    // address (support@wbcomdesigns.com), which Zoho rejects with
-    // INVALID_DATA /fromEmailAddress. The configured replyFromAddress is the
-    // registered channel, so it always wins; derivation is only a fallback.
-    if (this.replyFromAddress) fromAddress = this.replyFromAddress;
-    if (!fromAddress) fromAddress = ticket.email || '';
+    // Auto-derive from/to/channel from the most recent inbound thread so callers
+    // don't have to pass them (shared with the draft paths via deriveReplyRouting).
+    const { channel, fromAddress, toAddress } = await this.deriveReplyRouting(ticketId);
 
     if (!toAddress || !fromAddress) {
       throw new Error(
-        `Cannot send reply on ticket ${ticketId}: unable to derive from/to email ` +
-        `(threads=${threads.length}, ticket.email=${ticket.email || 'none'}). ` +
+        `Cannot send reply on ticket ${ticketId}: unable to derive from/to email. ` +
         `Use zoho_add_ticket_comment for an internal note instead.`
       );
     }
@@ -402,35 +405,7 @@ export class ZohoAPI {
    * =========================== */
 
   async draftTicketReply(ticketId: string, content: string) {
-    // Reuse the same auto-derivation logic as sendReply by inlining it: pull
-    // latest inbound thread + ticket, derive from/to/channel.
-    const threadsRes = await this.get(`/tickets/${ticketId}/threads`, { limit: '50' });
-    const threads: any[] = (threadsRes.data && threadsRes.data.data) || [];
-    const inbound = threads.find((t) => t.direction === 'in') || threads[0];
-    const ticketRes = await this.get(`/tickets/${ticketId}`);
-    const ticket: any = ticketRes.data;
-
-    const extractEmail = (s: string | undefined | null): string => {
-      if (!s) return '';
-      const m = s.match(/<([^>]+)>/);
-      return (m ? m[1] : s).trim();
-    };
-
-    let toAddress = '', fromAddress = '', channel = 'EMAIL';
-    if (inbound) {
-      channel = (inbound.channel || 'EMAIL').toUpperCase();
-      if (inbound.direction === 'in') {
-        toAddress = extractEmail(inbound.fromEmailAddress);
-        fromAddress = extractEmail(inbound.to) || ticket.email || '';
-      } else {
-        toAddress = extractEmail(inbound.to);
-        fromAddress = extractEmail(inbound.fromEmailAddress) || ticket.email || '';
-      }
-    }
-    if (!toAddress) toAddress = ticket.email || '';
-    // Same rule as sendReply: the configured registered channel always wins.
-    if (this.replyFromAddress) fromAddress = this.replyFromAddress;
-    if (!fromAddress) fromAddress = ticket.email || '';
+    const { channel, fromAddress, toAddress } = await this.deriveReplyRouting(ticketId);
 
     if (!toAddress || !fromAddress) {
       throw new Error(
@@ -449,11 +424,24 @@ export class ZohoAPI {
   }
 
   async updateDraftReply(ticketId: string, threadId: string, content: string) {
-    // PATCH only takes the fields you want to update; content is the typical edit.
+    // PATCH still requires channel + fromEmailAddress + to for an Email-channel draft
+    // (Zoho rejects a content-only PATCH with INVALID_DATA /fromEmailAddress), so
+    // re-derive the same routing the draft was created with.
+    const { channel, fromAddress, toAddress } = await this.deriveReplyRouting(ticketId);
+
+    if (!toAddress || !fromAddress) {
+      throw new Error(
+        `Cannot update draft on ticket ${ticketId}: unable to derive from/to email.`
+      );
+    }
+
     return this.patch(`/tickets/${ticketId}/draftReply/${threadId}`, {
-      channel: 'EMAIL',
+      channel,
+      fromEmailAddress: fromAddress,
+      to: toAddress,
       content: this.formatHtmlContent(content),
       contentType: 'html',
+      isForward: false,
     });
   }
 
@@ -758,6 +746,18 @@ export class ZohoAPI {
 
   async getDepartment(departmentId: string) {
     return this.get(`/departments/${departmentId}`);
+  }
+
+  /**
+   * List the portal's configured From/reply addresses with verified + active flags.
+   * Lets us confirm the valid outbound sending address from inside this MCP instead
+   * of guessing (the gap that made the reply from-address hard to reason about).
+   * departmentId 'allDepartment' returns every department's addresses.
+   */
+  async listReplyAddresses(departmentId = 'allDepartment', isActive?: boolean) {
+    const params: Record<string, string> = { departmentId, limit: '100' };
+    if (typeof isActive === 'boolean') params.isActive = String(isActive);
+    return this.get('/mailReplyAddress', params);
   }
 
   /* ===========================

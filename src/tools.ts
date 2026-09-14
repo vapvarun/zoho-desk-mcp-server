@@ -414,6 +414,23 @@ export const tools: Tool[] = [
     }
   },
   {
+    name: 'zoho_list_reply_addresses',
+    description: 'List the From/reply email addresses configured in the portal, each with isVerified and isActive flags. Use to confirm which address outbound replies actually send from (only an active + verified address can be a From address).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        department_id: {
+          type: 'string',
+          description: "Department ID to scope to, or 'allDepartment' for every department (default)."
+        },
+        active_only: {
+          type: 'boolean',
+          description: 'If true, only return active addresses.'
+        }
+      }
+    }
+  },
+  {
     name: 'zoho_list_agents',
     description: 'List all support agents',
     inputSchema: {

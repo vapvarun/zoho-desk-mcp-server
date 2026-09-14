@@ -158,6 +158,14 @@ export class ZohoDeskServer {
       const toolArgs = (args || {}) as any;
 
       try {
+        // Guarantee this.zohoAPI exists before ANY handler runs. It is created
+        // lazily inside ensureTokenInitialized (idempotent), and individual
+        // handlers used to each call it — but ~27 handlers omitted the call, so
+        // whichever of those was the first tool used in a session crashed with
+        // "Cannot read properties of undefined". Initializing once here at the
+        // single dispatch choke point covers every current and future handler.
+        await this.ensureTokenInitialized();
+
         switch (name) {
           /* ===========================
            * TICKET MANAGEMENT
@@ -216,6 +224,8 @@ export class ZohoDeskServer {
            * =========================== */
           case 'zoho_list_departments':
             return await this.handleListDepartments(toolArgs);
+          case 'zoho_list_reply_addresses':
+            return await this.handleListReplyAddresses(toolArgs);
           case 'zoho_list_agents':
             return await this.handleListAgents(toolArgs);
           case 'zoho_get_agent':
@@ -837,6 +847,23 @@ export class ZohoDeskServer {
   private async handleListDepartments(args: any): Promise<CallToolResult> {
     await this.ensureTokenInitialized();
     const response = await this.zohoAPI.getDepartments();
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response.data, null, 2),
+        } as TextContent,
+      ],
+    };
+  }
+
+  private async handleListReplyAddresses(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const response = await this.zohoAPI.listReplyAddresses(
+      args?.department_id || 'allDepartment',
+      typeof args?.active_only === 'boolean' ? args.active_only : undefined
+    );
 
     return {
       content: [
