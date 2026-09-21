@@ -8,6 +8,10 @@
  * @link https://github.com/vapvarun/zoho-desk-mcp-server
  */
 
+import { writeFileSync, mkdirSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve, sep } from 'node:path';
+
 interface ZohoResponse<T = any> {
   code: number;
   data: T;
@@ -405,7 +409,7 @@ export class ZohoAPI {
    * =========================== */
 
   async draftTicketReply(ticketId: string, content: string) {
-    const { channel, fromAddress, toAddress } = await this.deriveReplyRouting(ticketId);
+    const { fromAddress, toAddress } = await this.deriveReplyRouting(ticketId);
 
     if (!toAddress || !fromAddress) {
       throw new Error(
@@ -414,7 +418,10 @@ export class ZohoAPI {
     }
 
     return this.post(`/tickets/${ticketId}/draftReply`, {
-      channel,
+      // A reply draft is always an EMAIL reply. deriveReplyRouting returns the INBOUND
+      // channel, which for Web/CustomerPortal-originated tickets is WEB/CUSTOMERPORTAL,
+      // and Zoho's draftReply rejects those with a 500. Force EMAIL. (Fix: #41767/#41730.)
+      channel: 'EMAIL',
       fromEmailAddress: fromAddress,
       to: toAddress,
       content: this.formatHtmlContent(content),
@@ -427,7 +434,7 @@ export class ZohoAPI {
     // PATCH still requires channel + fromEmailAddress + to for an Email-channel draft
     // (Zoho rejects a content-only PATCH with INVALID_DATA /fromEmailAddress), so
     // re-derive the same routing the draft was created with.
-    const { channel, fromAddress, toAddress } = await this.deriveReplyRouting(ticketId);
+    const { fromAddress, toAddress } = await this.deriveReplyRouting(ticketId);
 
     if (!toAddress || !fromAddress) {
       throw new Error(
@@ -436,13 +443,92 @@ export class ZohoAPI {
     }
 
     return this.patch(`/tickets/${ticketId}/draftReply/${threadId}`, {
-      channel,
+      // Force EMAIL: draftReply only supports Email-channel drafts (see draftTicketReply).
+      channel: 'EMAIL',
       fromEmailAddress: fromAddress,
       to: toAddress,
       content: this.formatHtmlContent(content),
       contentType: 'html',
       isForward: false,
     });
+  }
+
+  /**
+   * Delete a draft reply thread (no email sent).
+   * Zoho Desk: DELETE /tickets/{id}/draftReply/{threadId} — exposed as rel:"delete" in the
+   * draft object's own `actions`. Editing a draft in place is unreliable (PATCH often 404s),
+   * so the clean "update" workflow is: delete the stale draft, then create a fresh one. Also
+   * use this to keep ONE draft per ticket (delete duplicates before creating a new draft).
+   */
+  async deleteDraftReply(ticketId: string, threadId: string) {
+    return this.delete(`/tickets/${ticketId}/draftReply/${threadId}`);
+  }
+
+  /**
+   * SEND an existing draft reply to the customer (real outbound email).
+   * Zoho Desk: POST /tickets/{id}/sendDraft?draftThreadId={threadId} — exposed as rel:"send"
+   * in the draft object's `actions`. This is an OUTWARD-FACING action: keep it human/owner
+   * triggered until auto-send is explicitly enabled.
+   */
+  async sendDraftReply(ticketId: string, threadId: string) {
+    return this.request('POST', `/tickets/${ticketId}/sendDraft`, undefined, { draftThreadId: threadId });
+  }
+
+  /**
+   * Download a thread attachment's binary content to a local file so it can be read/viewed.
+   * Zoho Desk: GET /tickets/{id}/threads/{threadId}/attachments/{attachmentId}/content — the
+   * URL carried on each attachment's `href`. The shared request() helper always parses JSON,
+   * so this does its own authed fetch (+ one token-refresh retry) and writes the bytes to disk.
+   * Returns { path, bytes, contentType }.
+   */
+  async getAttachmentContent(
+    ticketId: string,
+    threadId: string,
+    attachmentId: string,
+    fileName?: string,
+    outDir?: string
+  ): Promise<{ path: string; bytes: number; contentType: string }> {
+    const url = `${ZohoAPI.API_BASE}/tickets/${ticketId}/threads/${threadId}/attachments/${attachmentId}/content`;
+    const doFetch = () =>
+      fetch(url, { headers: { Authorization: `Zoho-oauthtoken ${this.accessToken}`, orgId: this.orgId } });
+
+    let response = await doFetch();
+    if (
+      (response.status === 401 || response.status === 403) &&
+      this.refreshToken && this.clientId && this.clientSecret
+    ) {
+      const tok = await ZohoAPI.refreshAccessToken(this.clientId, this.clientSecret, this.refreshToken);
+      if (tok?.access_token) {
+        this.accessToken = tok.access_token;
+        if (this.onTokenRefresh) this.onTokenRefresh(tok.access_token);
+        response = await doFetch();
+      }
+    }
+    if (!response.ok) {
+      throw new Error(
+        `Attachment download failed (HTTP ${response.status}) for attachment ${attachmentId} on ticket ${ticketId}`
+      );
+    }
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const buf = Buffer.from(await response.arrayBuffer());
+
+    // Sanitize EVERY path component (ids come from tool args — never trust them for a path):
+    // strip anything but word chars / dot / dash, which also kills "/" and ".." traversal.
+    const safeTicket = String(ticketId).replace(/[^\w.\-]+/g, '_');
+    const safeAttachment = String(attachmentId).replace(/[^\w.\-]+/g, '_');
+    const safeName = (fileName || safeAttachment).replace(/[^\w.\-]+/g, '_');
+    const base = outDir ? resolve(outDir) : join(tmpdir(), 'zoho-attachments', safeTicket);
+    // 0o700: attachment dirs may hold sensitive customer data — not world-readable on shared hosts.
+    mkdirSync(base, { recursive: true, mode: 0o700 });
+    // Resolve symlinks on the base FIRST (macOS tmpdir /var -> /private/var), then build + check the
+    // final path against that real base, so the containment guard doesn't false-positive on a symlink.
+    const realBase = realpathSync(base);
+    const outPath = resolve(realBase, `${safeAttachment}_${safeName}`);
+    if (outPath !== realBase && !outPath.startsWith(realBase + sep)) {
+      throw new Error('Refusing to write attachment outside its directory');
+    }
+    writeFileSync(outPath, buf, { mode: 0o600 });
+    return { path: outPath, bytes: buf.length, contentType };
   }
 
   /* ===========================

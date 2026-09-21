@@ -328,6 +328,12 @@ export class ZohoDeskServer {
             return await this.handleDraftTicketReply(toolArgs);
           case 'zoho_update_draft_reply':
             return await this.handleUpdateDraftReply(toolArgs);
+          case 'zoho_delete_draft_reply':
+            return await this.handleDeleteDraftReply(toolArgs);
+          case 'zoho_send_draft_reply':
+            return await this.handleSendDraftReply(toolArgs);
+          case 'zoho_get_attachment':
+            return await this.handleGetAttachment(toolArgs);
           case 'zoho_get_thread_original_content':
             return await this.handleGetThreadOriginalContent(toolArgs);
           case 'zoho_delete_thread_attachment':
@@ -1479,6 +1485,26 @@ export class ZohoDeskServer {
     await this.ensureTokenInitialized();
     const res = await this.zohoAPI.updateDraftReply(args.ticket_id, args.thread_id, args.content);
     return this.toResult(res.data);
+  }
+
+  private async handleDeleteDraftReply(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.deleteDraftReply(args.ticket_id, args.thread_id);
+    return this.toResult(res.data || { deleted: true, thread_id: args.thread_id });
+  }
+
+  private async handleSendDraftReply(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.sendDraftReply(args.ticket_id, args.thread_id);
+    return this.toResult(res.data);
+  }
+
+  private async handleGetAttachment(args: any): Promise<CallToolResult> {
+    await this.ensureTokenInitialized();
+    const res = await this.zohoAPI.getAttachmentContent(
+      args.ticket_id, args.thread_id, args.attachment_id, args.file_name, args.out_dir
+    );
+    return this.toResult(res);
   }
 
   private async handleGetThreadOriginalContent(args: any): Promise<CallToolResult> {

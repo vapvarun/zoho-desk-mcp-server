@@ -1072,7 +1072,7 @@ export const tools: Tool[] = [
   },
   {
     name: 'zoho_update_draft_reply',
-    description: 'Update the content of an existing draft reply thread.',
+    description: 'Update the content of an existing draft reply thread. NOTE: Zoho often rejects an in-place draft edit (PATCH 404) — if this fails, delete the draft with zoho_delete_draft_reply and create a fresh one with zoho_draft_ticket_reply (that delete+recreate is the reliable "update").',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1081,6 +1081,45 @@ export const tools: Tool[] = [
         content: { type: 'string', description: 'New reply body' }
       },
       required: ['ticket_id', 'thread_id', 'content']
+    }
+  },
+  {
+    name: 'zoho_delete_draft_reply',
+    description: 'Delete a stale/duplicate draft reply thread (no email sent). Keep ONE draft per ticket: before creating a new draft, delete any older ones. Also the reliable way to "update" a draft (delete + recreate). thread_id comes from a draft creation result or a ticket read (threads with status DRAFT).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: { type: 'string', description: 'Ticket ID' },
+        thread_id: { type: 'string', description: 'Draft thread ID to delete' }
+      },
+      required: ['ticket_id', 'thread_id']
+    }
+  },
+  {
+    name: 'zoho_send_draft_reply',
+    description: 'SEND an existing draft reply to the customer (real outbound email). Outward-facing action — only call when a human/owner has approved the send or auto-send is explicitly enabled. Default posture is to LEAVE replies as drafts for review.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: { type: 'string', description: 'Ticket ID' },
+        thread_id: { type: 'string', description: 'Draft thread ID to send' }
+      },
+      required: ['ticket_id', 'thread_id']
+    }
+  },
+  {
+    name: 'zoho_get_attachment',
+    description: 'Download a ticket thread attachment (screenshot, log, image) to a local file and return its path, so you can actually LOOK at what the customer sent before diagnosing. Get thread_id + attachment_id + name from zoho_get_thread (attachments[].id / .name / .href).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticket_id: { type: 'string', description: 'Ticket ID' },
+        thread_id: { type: 'string', description: 'Thread ID that carries the attachment' },
+        attachment_id: { type: 'string', description: 'Attachment ID from the thread attachments list' },
+        file_name: { type: 'string', description: 'Optional original file name (preserves the extension so images open correctly)' },
+        out_dir: { type: 'string', description: 'Optional output directory; defaults to a temp folder under the ticket ID' }
+      },
+      required: ['ticket_id', 'thread_id', 'attachment_id']
     }
   },
 
