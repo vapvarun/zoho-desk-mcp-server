@@ -7,6 +7,7 @@
  * server does, so the next call (from here or from the MCP server) reuses it.
  *
  *   node build/cli.js ticket-full <ticketId>
+ *   node build/cli.js open-tickets        # every open ticket, compact, newest first
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -126,10 +127,34 @@ async function ticketFull(ticketId: string) {
   };
 }
 
-const USAGE = 'Usage: node build/cli.js ticket-full <ticketId>';
+/** Every open ticket as one compact row, newest first - the queue tally without 50 full records. */
+async function openTickets() {
+  const api = client();
+  const rows = await listAll((from) => api.getTickets({ status: 'Open', limit: PAGE, from }), 'open tickets');
+  return rows
+    .map((t: any) => ({
+      id: t.id,
+      ticketNumber: t.ticketNumber,
+      createdTime: t.createdTime,
+      customerResponseTime: t.customerResponseTime,
+      subject: t.subject,
+      email: t.email,
+      assigneeId: t.assigneeId ?? null,
+      lastThread: t.lastThread ? { direction: t.lastThread.direction, isDraft: t.lastThread.isDraft } : null,
+      commentCount: Number(t.commentCount ?? 0),
+      threadCount: Number(t.threadCount ?? 0),
+    }))
+    .sort((a, b) => String(b.createdTime).localeCompare(String(a.createdTime)));
+}
+
+const USAGE = 'Usage: node build/cli.js ticket-full <ticketId> | open-tickets';
 
 async function main() {
   const [command, ...args] = process.argv.slice(2);
+  if (command === 'open-tickets') {
+    process.stdout.write(JSON.stringify(await openTickets(), null, 2) + '\n');
+    return;
+  }
   if (command === 'ticket-full' && args[0]) {
     process.stdout.write(JSON.stringify(await ticketFull(args[0]), null, 2) + '\n');
     return;
