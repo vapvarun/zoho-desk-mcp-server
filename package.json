@@ -5,10 +5,11 @@
   "type": "module",
   "main": "build/index.js",
   "bin": {
-    "zoho-desk-mcp-server": "./build/index.js"
+    "zoho-desk-mcp-server": "./build/index.js",
+    "zoho-desk-cli": "./build/cli.js"
   },
   "scripts": {
-    "build": "tsc && chmod +x build/index.js",
+    "build": "tsc && chmod +x build/index.js build/cli.js",
     "start": "node build/index.js",
     "dev": "tsc --watch",
     "prepare": "npm run build",
