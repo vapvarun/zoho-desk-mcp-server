@@ -100,7 +100,7 @@ async function ticketFull(ticketId: string) {
       id: c.id,
       commentedTime: c.commentedTime,
       isPublic: c.isPublic,
-      commenter: c.commenter ? { name: c.commenter.name, email: c.commenter.email } : null,
+      commenter: c.commenter ? { name: c.commenter.name, email: c.commenter.email, type: c.commenter.type ?? null } : null,
       content: c.content ?? '',
     }))
     .sort((a, b) => String(a.commentedTime).localeCompare(String(b.commentedTime)));
