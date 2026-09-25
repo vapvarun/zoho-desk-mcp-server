@@ -489,9 +489,41 @@ export class ZohoAPI {
     outDir?: string
   ): Promise<{ path: string; bytes: number; contentType: string }> {
     const url = `${ZohoAPI.API_BASE}/tickets/${ticketId}/threads/${threadId}/attachments/${attachmentId}/content`;
+    const response = await this.binaryFetch(url);
+    if (!response.ok) {
+      throw new Error(
+        `Attachment download failed (HTTP ${response.status}) for attachment ${attachmentId} on ticket ${ticketId}`
+      );
+    }
+    return this.saveBinary(response, ticketId, `${attachmentId}_${fileName || attachmentId}`, outDir);
+  }
+
+  /**
+   * Download an inline (pasted) screenshot. Customers paste images into the email body, so they
+   * are not attachments: the thread HTML carries <img src="/api/v1/threads/{id}/inlineImages/...">.
+   * Only that path shape is accepted, so this cannot be turned into a generic authed GET.
+   */
+  async getInlineImage(
+    ticketId: string,
+    src: string,
+    outDir?: string
+  ): Promise<{ path: string; bytes: number; contentType: string }> {
+    const path = src.replace(/^https:\/\/desk\.zoho\.com/, '').replace(/&amp;/g, '&');
+    if (!/^\/api\/v1\/threads\/\d+\/inlineImages\//.test(path)) {
+      throw new Error('Not a Zoho inline-image path: ' + src.slice(0, 80));
+    }
+    const response = await this.binaryFetch(`${ZohoAPI.API_BASE}${path.slice('/api/v1'.length)}`);
+    if (!response.ok) {
+      throw new Error(`Inline image download failed (HTTP ${response.status}) on ticket ${ticketId}`);
+    }
+    const name = new URLSearchParams(path.split('?')[1] ?? '').get('f') || `inline-${Date.now()}.png`;
+    return this.saveBinary(response, ticketId, name, outDir);
+  }
+
+  /** Authed GET that returns the raw Response (request() always parses JSON), with one token-refresh retry. */
+  private async binaryFetch(url: string): Promise<Response> {
     const doFetch = () =>
       fetch(url, { headers: { Authorization: `Zoho-oauthtoken ${this.accessToken}`, orgId: this.orgId } });
-
     let response = await doFetch();
     if (
       (response.status === 401 || response.status === 403) &&
@@ -504,26 +536,29 @@ export class ZohoAPI {
         response = await doFetch();
       }
     }
-    if (!response.ok) {
-      throw new Error(
-        `Attachment download failed (HTTP ${response.status}) for attachment ${attachmentId} on ticket ${ticketId}`
-      );
-    }
+    return response;
+  }
+
+  private async saveBinary(
+    response: Response,
+    ticketId: string,
+    fileName: string,
+    outDir?: string
+  ): Promise<{ path: string; bytes: number; contentType: string }> {
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
     const buf = Buffer.from(await response.arrayBuffer());
 
     // Sanitize EVERY path component (ids come from tool args — never trust them for a path):
     // strip anything but word chars / dot / dash, which also kills "/" and ".." traversal.
     const safeTicket = String(ticketId).replace(/[^\w.\-]+/g, '_');
-    const safeAttachment = String(attachmentId).replace(/[^\w.\-]+/g, '_');
-    const safeName = (fileName || safeAttachment).replace(/[^\w.\-]+/g, '_');
+    const safeName = fileName.replace(/[^\w.\-]+/g, '_');
     const base = outDir ? resolve(outDir) : join(tmpdir(), 'zoho-attachments', safeTicket);
     // 0o700: attachment dirs may hold sensitive customer data — not world-readable on shared hosts.
     mkdirSync(base, { recursive: true, mode: 0o700 });
     // Resolve symlinks on the base FIRST (macOS tmpdir /var -> /private/var), then build + check the
     // final path against that real base, so the containment guard doesn't false-positive on a symlink.
     const realBase = realpathSync(base);
-    const outPath = resolve(realBase, `${safeAttachment}_${safeName}`);
+    const outPath = resolve(realBase, safeName);
     if (outPath !== realBase && !outPath.startsWith(realBase + sep)) {
       throw new Error('Refusing to write attachment outside its directory');
     }

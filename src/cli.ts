@@ -8,6 +8,7 @@
  *
  *   node build/cli.js ticket-full <ticketId>
  *   node build/cli.js open-tickets        # every open ticket, compact, newest first
+ *   node build/cli.js inline-image <ticketId> <src> [outDir]   # save a pasted screenshot
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -147,7 +148,7 @@ async function openTickets() {
     .sort((a, b) => String(b.createdTime).localeCompare(String(a.createdTime)));
 }
 
-const USAGE = 'Usage: node build/cli.js ticket-full <ticketId> | open-tickets';
+const USAGE = 'Usage: node build/cli.js ticket-full <ticketId> | open-tickets | inline-image <ticketId> <src> [outDir]';
 
 async function main() {
   const [command, ...args] = process.argv.slice(2);
@@ -157,6 +158,10 @@ async function main() {
   }
   if (command === 'ticket-full' && args[0]) {
     process.stdout.write(JSON.stringify(await ticketFull(args[0]), null, 2) + '\n');
+    return;
+  }
+  if (command === 'inline-image' && args[1]) {
+    process.stdout.write(JSON.stringify(await client().getInlineImage(args[0], args[1], args[2])) + '\n');
     return;
   }
   process.stderr.write(USAGE + '\n');
